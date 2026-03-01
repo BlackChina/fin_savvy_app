@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Fin Savvy – Upload statement</title>
+    <title>Fin Savvy – Receipts</title>
     <style>
       body {
         font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -41,19 +41,20 @@
       nav { display: flex; gap: 0.5rem; margin: 1rem 2rem; }
       nav a { color: #9ca3af; text-decoration: none; font-size: 0.9rem; }
       nav a:hover { color: #e5e7eb; }
-      main { padding: 2rem; max-width: 520px; }
+      main { padding: 2rem; max-width: 720px; }
       .card {
         background: #020617;
         border-radius: 0.75rem;
         padding: 1.5rem 2rem;
         border: 1px solid #1f2937;
+        margin-bottom: 1.5rem;
       }
       h2 { margin: 0 0 1rem; font-size: 1.1rem; }
       .field { margin-bottom: 1rem; }
       label { display: block; font-size: 0.85rem; margin-bottom: 0.35rem; color: #9ca3af; }
       input[type="text"],
       input[type="date"],
-      select {
+      input[type="number"] {
         width: 100%;
         padding: 0.5rem 0.7rem;
         border-radius: 0.5rem;
@@ -63,11 +64,7 @@
         font-size: 0.9rem;
         box-sizing: border-box;
       }
-      input[type="file"] {
-        padding: 0.5rem 0;
-        color: #9ca3af;
-        font-size: 0.9rem;
-      }
+      input[type="file"] { padding: 0.5rem 0; color: #9ca3af; font-size: 0.9rem; }
       button[type="submit"] {
         padding: 0.6rem 1.2rem;
         border-radius: 0.6rem;
@@ -79,8 +76,13 @@
         cursor: pointer;
         margin-top: 0.5rem;
       }
-      button[type="submit"]:hover { filter: brightness(1.05); }
+      table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+      th, td { padding: 0.5rem 0.75rem; text-align: left; }
+      th { color: #9ca3af; font-weight: 500; border-bottom: 1px solid #1f2937; }
+      tbody tr:hover { background: #111827; }
+      .amount { color: #f97316; }
       .error { color: #f97316; font-size: 0.9rem; margin-top: 0.5rem; }
+      .hint { font-size: 0.85rem; color: #9ca3af; margin-bottom: 1rem; }
     </style>
   </head>
   <body>
@@ -96,71 +98,68 @@
 
     <nav>
       <a href="/">Dashboard</a>
-      <a href="/upload" style="color: #e5e7eb;">Upload statement</a>
-      <a href="/receipts">Receipts</a>
+      <a href="/upload">Upload statement</a>
+      <a href="/receipts" style="color: #e5e7eb;">Receipts</a>
       <a href="/tax">Tax</a>
       <a href="/credit">Credit score</a>
     </nav>
 
     <main>
-      {% if not accounts %}
-      <div class="card" style="margin-bottom: 1.5rem;">
-        <h2>Add a bank account</h2>
-        <p style="color: #9ca3af; font-size: 0.9rem; margin-bottom: 1rem;">
-          Add an account first, then you can upload statements from this page. You can test everything locally before integrating with banking APIs.
-        </p>
-        <form method="post" action="/upload/add-account">
+      <div class="card">
+        <h2>Add receipt or invoice</h2>
+        <p class="hint">Track cash spending by adding receipts. Helps with tax and reduces unaccounted waste.</p>
+        <form method="post" action="/receipts" enctype="multipart/form-data">
           <div class="field">
-            <label for="name">Account name</label>
-            <input type="text" name="name" id="name" placeholder="e.g. Current Account" required />
+            <label for="receipt_date">Date</label>
+            <input type="date" name="receipt_date" id="receipt_date" required />
           </div>
           <div class="field">
-            <label for="institution">Bank / institution</label>
-            <input type="text" name="institution" id="institution" placeholder="e.g. Standard Bank" required />
+            <label for="amount">Amount (R)</label>
+            <input type="number" name="amount" id="amount" step="0.01" min="0" required />
           </div>
-          <button type="submit">Add account</button>
-          {% if add_account_error %}<div class="error">{{ add_account_error }}</div>{% endif %}
+          <div class="field">
+            <label for="description">Description (optional)</label>
+            <input type="text" name="description" id="description" placeholder="Vendor or category" />
+          </div>
+          <div class="field">
+            <label for="file">Scan / photo (optional)</label>
+            <input type="file" name="file" id="file" accept=".pdf,.png,.jpg,.jpeg,.webp" />
+          </div>
+          <button type="submit">Add receipt</button>
+          {% if error %}<div class="error">{{ error }}</div>{% endif %}
         </form>
       </div>
-      {% endif %}
 
       <div class="card">
-        <h2>Upload bank statement (PDF)</h2>
-        <p style="color: #9ca3af; font-size: 0.9rem; margin-bottom: 1.25rem;">
-          Upload a Standard Bank PDF statement. Transactions will be parsed and added to your dashboard.
-        </p>
-
-        <form method="post" action="/upload" enctype="multipart/form-data">
-          <div class="field">
-            <label for="account_id">Account</label>
-            <select name="account_id" id="account_id" {% if not accounts %}disabled{% endif %} required>
-              {% for acc in accounts %}
-              <option value="{{ acc.id }}">{{ acc.name }} ({{ acc.institution }})</option>
-              {% endfor %}
-              {% if not accounts %}
-              <option value="">Add an account above first</option>
-              {% endif %}
-            </select>
-          </div>
-          <div class="field">
-            <label for="period_start">Period start</label>
-            <input type="date" name="period_start" id="period_start" required />
-          </div>
-          <div class="field">
-            <label for="period_end">Period end</label>
-            <input type="date" name="period_end" id="period_end" required />
-          </div>
-          <div class="field">
-            <label for="file">PDF file</label>
-            <input type="file" name="file" id="file" accept=".pdf,application/pdf" required />
-          </div>
-
-          <button type="submit" {% if not accounts %}disabled{% endif %}>Upload</button>
-
-          {% if error %}
-          <div class="error">{{ error }}</div>
-          {% endif %}
-        </form>
+        <h2>Your receipts</h2>
+        {% if receipts %}
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Description</th>
+              <th style="text-align: right;">Amount</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in receipts %}
+            <tr>
+              <td>{{ r.date }}</td>
+              <td>{{ r.description or "—" }}</td>
+              <td style="text-align: right;" class="amount">R {{ r.amount | round(2) }}</td>
+              <td>
+                {% if r.file_path %}
+                <a href="/receipts/{{ r.id }}/file" target="_blank" rel="noopener" style="color: #38bdf8; font-size: 0.85rem;">View</a>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p style="color: #9ca3af; margin: 0;">No receipts yet. Add one above to track cash spending.</p>
+        {% endif %}
       </div>
     </main>
   </body>

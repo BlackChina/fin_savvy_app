@@ -34,6 +34,29 @@ def _seed_default_user() -> None:
             )
             db.add(user)
             db.commit()
+            db.refresh(user)
+            if db.query(models.BankAccount).filter(models.BankAccount.user_id == user.id).count() == 0:
+                db.add(
+                    models.BankAccount(
+                        user_id=user.id,
+                        name="Current Account",
+                        institution="My Bank",
+                        currency="ZAR",
+                    )
+                )
+                db.commit()
+        else:
+            user = db.query(models.User).filter(models.User.username == "mfundo").first()
+            if user and db.query(models.BankAccount).filter(models.BankAccount.user_id == user.id).count() == 0:
+                db.add(
+                    models.BankAccount(
+                        user_id=user.id,
+                        name="Current Account",
+                        institution="My Bank",
+                        currency="ZAR",
+                    )
+                )
+                db.commit()
     finally:
         db.close()
 

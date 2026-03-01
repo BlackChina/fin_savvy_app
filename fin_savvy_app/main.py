@@ -1,17 +1,20 @@
 from calendar import month_name, monthrange
-from datetime import date
+from collections import defaultdict
+from datetime import date, timedelta
 from tempfile import NamedTemporaryFile
+import json
 import os
+import uuid
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from . import auth, classifier, crud, models, pdf_parser, schemas
+from . import auth, classifier, crud, models, pdf_parser, schemas, tax_calc
 from .database import SessionLocal, init_db
 
 
@@ -22,6 +25,8 @@ templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 static_dir = os.path.join(BASE_DIR, "static")
 if os.path.isdir(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
+UPLOAD_RECEIPTS_DIR = os.path.join(BASE_DIR, "uploads", "receipts")
+UPLOAD_PAYSLIPS_DIR = os.path.join(BASE_DIR, "uploads", "payslips")
 
 app.add_middleware(
     SessionMiddleware,
@@ -35,6 +40,14 @@ def get_db() -> Session:
         yield db
     finally:
         db.close()
+
+
+def get_current_user_id(request: Request, db: Session = Depends(get_db)) -> int | None:
+    username = request.session.get("user")
+    if not username:
+        return None
+    user = crud.get_user_by_username(db, username)
+    return user.id if user else None
 
 
 @app.on_event("startup")
@@ -55,13 +68,13 @@ def login_page(request: Request) -> HTMLResponse:
     )
 
 
-@app.post("/login", response_model=None)
+@app.post("/login", response_model=None, response_class=HTMLResponse)
 async def login_submit(
     request: Request,
     username: str = Form(...),
     password: str = Form(...),
     db: Session = Depends(get_db),
-) -> RedirectResponse | HTMLResponse:
+):
     user = crud.get_user_by_username(db, username)
     if user and auth.verify_password(password, user.password_hash):
         request.session["user"] = user.username
@@ -82,14 +95,14 @@ def register_page(request: Request) -> HTMLResponse:
     )
 
 
-@app.post("/register", response_model=None)
+@app.post("/register", response_model=None, response_class=HTMLResponse)
 async def register_submit(
     request: Request,
     username: str = Form(...),
     email: str = Form(...),
     password: str = Form(...),
     db: Session = Depends(get_db),
-) -> RedirectResponse | HTMLResponse:
+):
     if crud.get_user_by_username(db, username):
         return templates.TemplateResponse(
             "register.html",
@@ -108,7 +121,11 @@ async def register_submit(
             {"request": request, "error": "Password must be at least 6 characters"},
             status_code=400,
         )
-    crud.create_user(db, username=username, email=email, password=password)
+    user = crud.create_user(db, username=username, email=email, password=password)
+    crud.create_bank_account(
+        db, user.id,
+        schemas.BankAccountCreate(name="Current Account", institution="My Bank", currency="ZAR"),
+    )
     return RedirectResponse(url="/login", status_code=303)
 
 
@@ -159,13 +176,13 @@ def reset_password_page(
     )
 
 
-@app.post("/reset-password", response_model=None)
+@app.post("/reset-password", response_model=None, response_class=HTMLResponse)
 async def reset_password_submit(
     request: Request,
     token: str = Form(...),
     password: str = Form(...),
     db: Session = Depends(get_db),
-) -> RedirectResponse | HTMLResponse:
+):
     user = crud.get_user_by_reset_token(db, token)
     if not user:
         return templates.TemplateResponse(
@@ -196,12 +213,72 @@ def dashboard(
     account_id: int = 1,
     period: str | None = None,
     db: Session = Depends(get_db),
+    user_id: int | None = Depends(get_current_user_id),
 ) -> HTMLResponse:
+    import traceback
+
     user = request.session.get("user")
-    if not user:
+    if not user or user_id is None:
         return RedirectResponse(url="/login", status_code=303)
 
-    accounts = crud.list_bank_accounts(db)
+    # Prefer period from query string to avoid any param injection issues
+    period = request.query_params.get("period") or period
+    expense_sort = request.query_params.get("expense_sort") or "date"
+    income_sort = request.query_params.get("income_sort") or "date"
+    try:
+        return _render_dashboard(request, user, user_id, account_id, period, db, expense_sort, income_sort)
+    except Exception as e:
+        tb = traceback.format_exc()
+        return HTMLResponse(
+            content=f"<pre style='background:#1e293b;color:#e2e8f0;padding:1rem;overflow:auto;'>{tb}</pre>",
+            status_code=500,
+        )
+
+
+def _render_dashboard(request, user, user_id, account_id, period, db, expense_sort: str = "date", income_sort: str = "date"):
+    accounts = crud.list_bank_accounts(db, user_id)
+    if not accounts:
+        return templates.TemplateResponse(
+            "dashboard.html",
+            {
+                "request": request,
+                "account_id": 0,
+                "accounts": [],
+                "available_months": [],
+                "month_names": {i: month_name[i] for i in range(1, 13)},
+                "period_label": "No account",
+                "month_name": "",
+                "year": "",
+                "month": None,
+                "total_income": 0.0,
+                "total_expense": 0.0,
+                "net": 0.0,
+                "tx_count": 0,
+                "generosity_total": 0.0,
+                "discretionary_total": 0.0,
+                "all_expenses": [],
+                "all_income": [],
+                "expense_categories": [],
+                "income_categories": [],
+                "expense_sort": "date",
+                "income_sort": "date",
+                "chart_income_labels_json": "[]",
+                "chart_income_data_json": "[]",
+                "chart_expense_labels_json": "[]",
+                "chart_expense_data_json": "[]",
+                "parties_outgoing": [],
+                "parties_incoming": [],
+                "username": user,
+                "no_accounts": True,
+                "cash_withdrawal_total": 0.0,
+                "receipt_total": 0.0,
+                "cash_receipts_flag": False,
+                "receipt_coverage_pct": 100,
+                "expense_by_category": {},
+            },
+        )
+    if not crud.get_bank_account_for_user(db, account_id, user_id):
+        account_id = accounts[0].id
     available_months = crud.get_available_months(db, account_id)
 
     latest_date = (
@@ -212,10 +289,10 @@ def dashboard(
     )
 
     year, month = None, None
-    if period:
+    if period and isinstance(period, str):
         try:
-            y, m = period.split("-")
-            year, month = int(y), int(m)
+            y, m = period.strip().split("-")
+            year, month = int(y.strip()), int(m.strip())
         except (ValueError, AttributeError):
             pass
 
@@ -238,15 +315,31 @@ def dashboard(
                 "tx_count": 0,
                 "generosity_total": 0.0,
                 "discretionary_total": 0.0,
-                "top_expenses": [],
-                "recent_tx": [],
+                "all_expenses": [],
+                "all_income": [],
+                "expense_categories": [],
+                "income_categories": [],
+                "expense_sort": "date",
+                "income_sort": "date",
+                "chart_income_labels_json": "[]",
+                "chart_income_data_json": "[]",
+                "chart_expense_labels_json": "[]",
+                "chart_expense_data_json": "[]",
+                "parties_outgoing": [],
+                "parties_incoming": [],
                 "username": user,
+                "no_accounts": False,
+                "cash_withdrawal_total": 0.0,
+                "receipt_total": 0.0,
+                "cash_receipts_flag": False,
+                "receipt_coverage_pct": 100,
+                "expense_by_category": {},
             },
         )
 
+    # Only fall back to latest month when no period was given or parsing failed.
+    # Never override an explicit period from the URL so the dropdown selection is respected.
     if year is None or month is None:
-        year, month = latest_date.year, latest_date.month
-    elif available_months and (year, month) not in available_months:
         year, month = latest_date.year, latest_date.month
 
     period_start = date(year, month, 1)
@@ -305,7 +398,7 @@ def dashboard(
     generosity_total = sum(abs(t.amount) for t in all_expenses if classifier.is_generosity(t.description_raw))
     discretionary_total = sum(abs(t.amount) for t in all_expenses if classifier.is_discretionary(t.description_raw))
 
-    top_expenses = (
+    expenses_q = (
         db.query(models.Transaction)
         .join(models.Statement)
         .filter(
@@ -314,24 +407,102 @@ def dashboard(
             models.Transaction.date <= period_end,
             models.Transaction.direction == "EXPENSE",
         )
-        .order_by(models.Transaction.amount.asc())
-        .limit(10)
-        .all()
     )
+    all_expenses = expenses_q.order_by(models.Transaction.date, models.Transaction.id).all()
+    if expense_sort == "amount":
+        all_expenses = sorted(all_expenses, key=lambda t: (t.amount, t.id))
+    elif expense_sort == "date_category":
+        all_expenses = sorted(
+            all_expenses,
+            key=lambda t: (classifier.get_category_label(t.description_raw) or "Other", t.date, t.id),
+        )
+    elif expense_sort == "amount_category":
+        all_expenses = sorted(
+            all_expenses,
+            key=lambda t: (classifier.get_category_label(t.description_raw) or "Other", -abs(t.amount), t.id),
+        )
 
-    recent_tx = (
+    income_q = (
         db.query(models.Transaction)
         .join(models.Statement)
-        .filter(models.Statement.bank_account_id == account_id)
-        .order_by(models.Transaction.date.desc(), models.Transaction.id.desc())
-        .limit(15)
-        .all()
+        .filter(
+            models.Statement.bank_account_id == account_id,
+            models.Transaction.date >= period_start,
+            models.Transaction.date <= period_end,
+            models.Transaction.direction == "INCOME",
+        )
+    )
+    all_income = income_q.order_by(models.Transaction.date, models.Transaction.id).all()
+    if income_sort == "amount":
+        all_income = sorted(all_income, key=lambda t: (-t.amount, t.id))
+    elif income_sort == "date_category":
+        all_income = sorted(
+            all_income,
+            key=lambda t: (classifier.get_category_label(t.description_raw) or "Other", t.date, t.id),
+        )
+    elif income_sort == "amount_category":
+        all_income = sorted(
+            all_income,
+            key=lambda t: (classifier.get_category_label(t.description_raw) or "Other", -t.amount, t.id),
+        )
+
+    expense_categories = [classifier.get_category_label(t.description_raw) or "Other" for t in all_expenses]
+    income_categories = [classifier.get_category_label(t.description_raw) or "Other" for t in all_income]
+
+    category_names = classifier.get_all_category_names()
+    expense_by_category: dict[str, float] = {name: 0.0 for name in category_names}
+    expense_by_category["Other"] = 0.0
+    for t in all_expenses:
+        label = classifier.get_category_label(t.description_raw) or "Other"
+        expense_by_category[label] = expense_by_category.get(label, 0.0) + abs(t.amount)
+
+    # Daily aggregates for timeseries charts
+    income_by_day: dict[str, float] = defaultdict(float)
+    expense_by_day: dict[str, float] = defaultdict(float)
+    d = period_start
+    while d <= period_end:
+        key = d.isoformat()
+        income_by_day[key]
+        expense_by_day[key]
+        d += timedelta(days=1)
+    for t in all_expenses:
+        expense_by_day[t.date.isoformat()] += abs(t.amount)
+    for t in all_income:
+        income_by_day[t.date.isoformat()] += t.amount
+    chart_income_labels = sorted(income_by_day.keys())
+    chart_income_data = [income_by_day[k] for k in chart_income_labels]
+    chart_expense_labels = sorted(expense_by_day.keys())
+    chart_expense_data = [expense_by_day[k] for k in chart_expense_labels]
+
+    parties_outgoing = crud.get_party_totals_by_party(
+        db, account_id, "EXPENSE", sort_by="total",
+        period_start=period_start, period_end=period_end,
+    )
+    parties_incoming = crud.get_party_totals_by_party(
+        db, account_id, "INCOME", sort_by="total",
+        period_start=period_start, period_end=period_end,
     )
 
     period_label = f"{month_name[month]} {year}"
     month_names = {i: month_name[i] for i in range(1, 13)}
 
-    return templates.TemplateResponse(
+    try:
+        cash_withdrawal_total = crud.get_cash_withdrawal_total_for_user(
+            db, user_id, period_start, period_end
+        )
+        receipt_total = crud.get_receipt_total_for_user(db, user_id, period_start, period_end)
+    except Exception:
+        cash_withdrawal_total = 0.0
+        receipt_total = 0.0
+    cash_receipts_ratio = (
+        (receipt_total / cash_withdrawal_total) if cash_withdrawal_total else 1.0
+    )
+    RECEIPT_COVERAGE_THRESHOLD = 0.80
+    cash_receipts_flag = (
+        cash_withdrawal_total > 0 and cash_receipts_ratio < RECEIPT_COVERAGE_THRESHOLD
+    )
+
+    response = templates.TemplateResponse(
         "dashboard.html",
         {
             "request": request,
@@ -350,28 +521,73 @@ def dashboard(
             "tx_count": int(tx_count),
             "generosity_total": float(generosity_total),
             "discretionary_total": float(discretionary_total),
-            "top_expenses": top_expenses,
-            "recent_tx": recent_tx,
+            "all_expenses": all_expenses,
+            "all_income": all_income,
+            "expense_categories": expense_categories,
+            "income_categories": income_categories,
+            "expense_sort": expense_sort,
+            "income_sort": income_sort,
+            "chart_income_labels_json": json.dumps(chart_income_labels),
+            "chart_income_data_json": json.dumps(chart_income_data),
+            "chart_expense_labels_json": json.dumps(chart_expense_labels),
+            "chart_expense_data_json": json.dumps(chart_expense_data),
+            "parties_outgoing": parties_outgoing,
+            "parties_incoming": parties_incoming,
+            "no_accounts": False,
+            "cash_withdrawal_total": float(cash_withdrawal_total),
+            "receipt_total": float(receipt_total),
+            "cash_receipts_flag": cash_receipts_flag,
+            "receipt_coverage_pct": round(cash_receipts_ratio * 100, 0) if cash_withdrawal_total else 100,
+            "expense_by_category": expense_by_category,
         },
     )
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    return response
 
 
 @app.get("/upload", response_class=HTMLResponse)
 def upload_page(
     request: Request,
     db: Session = Depends(get_db),
+    user_id: int | None = Depends(get_current_user_id),
 ) -> HTMLResponse:
     user = request.session.get("user")
-    if not user:
+    if not user or user_id is None:
         return RedirectResponse(url="/login", status_code=303)
-    accounts = crud.list_bank_accounts(db)
+    accounts = crud.list_bank_accounts(db, user_id)
     return templates.TemplateResponse(
         "upload.html",
-        {"request": request, "accounts": accounts, "username": user, "error": None},
+        {"request": request, "accounts": accounts, "username": user, "error": None, "add_account_error": None},
     )
 
 
-@app.post("/upload", response_model=None)
+@app.post("/upload/add-account", response_model=None, response_class=HTMLResponse)
+def upload_add_account(
+    request: Request,
+    name: str = Form(...),
+    institution: str = Form(...),
+    db: Session = Depends(get_db),
+    user_id: int | None = Depends(get_current_user_id),
+):
+    user = request.session.get("user")
+    if not user or user_id is None:
+        return RedirectResponse(url="/login", status_code=303)
+    try:
+        crud.create_bank_account(
+            db, user_id,
+            schemas.BankAccountCreate(name=name.strip(), institution=institution.strip(), currency="ZAR"),
+        )
+    except Exception:
+        accounts = crud.list_bank_accounts(db, user_id)
+        return templates.TemplateResponse(
+            "upload.html",
+            {"request": request, "accounts": accounts, "username": user, "error": None, "add_account_error": "Could not add account. Try again."},
+            status_code=400,
+        )
+    return RedirectResponse(url="/upload", status_code=303)
+
+
+@app.post("/upload", response_model=None, response_class=HTMLResponse)
 async def upload_submit(
     request: Request,
     account_id: int = Form(...),
@@ -379,13 +595,16 @@ async def upload_submit(
     period_end: date = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-) -> RedirectResponse | HTMLResponse:
+    user_id: int | None = Depends(get_current_user_id),
+):
     user = request.session.get("user")
-    if not user:
+    if not user or user_id is None:
         return RedirectResponse(url="/login", status_code=303)
+    if not crud.get_bank_account_for_user(db, account_id, user_id):
+        return RedirectResponse(url="/upload", status_code=303)
 
     if file.content_type not in ("application/pdf", "application/octet-stream"):
-        accounts = crud.list_bank_accounts(db)
+        accounts = crud.list_bank_accounts(db, user_id)
         return templates.TemplateResponse(
             "upload.html",
             {
@@ -405,7 +624,7 @@ async def upload_submit(
         transactions = pdf_parser.to_transaction_models(parsed)
 
     if not transactions:
-        accounts = crud.list_bank_accounts(db)
+        accounts = crud.list_bank_accounts(db, user_id)
         return templates.TemplateResponse(
             "upload.html",
             {
@@ -432,12 +651,177 @@ async def upload_submit(
     )
 
 
+os.makedirs(UPLOAD_RECEIPTS_DIR, exist_ok=True)
+os.makedirs(UPLOAD_PAYSLIPS_DIR, exist_ok=True)
+
+
+@app.get("/receipts", response_class=HTMLResponse)
+def receipts_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    user_id: int | None = Depends(get_current_user_id),
+) -> HTMLResponse:
+    user = request.session.get("user")
+    if not user or user_id is None:
+        return RedirectResponse(url="/login", status_code=303)
+    receipts = crud.list_receipts_for_user(db, user_id)
+    return templates.TemplateResponse(
+        "receipts.html",
+        {"request": request, "username": user, "receipts": receipts, "error": None},
+    )
+
+
+@app.post("/receipts", response_model=None, response_class=HTMLResponse)
+async def receipt_submit(
+    request: Request,
+    receipt_date: date = Form(...),
+    amount: float = Form(...),
+    description: str | None = Form(None),
+    file: UploadFile | None = File(None),
+    db: Session = Depends(get_db),
+    user_id: int | None = Depends(get_current_user_id),
+):
+    user = request.session.get("user")
+    if not user or user_id is None:
+        return RedirectResponse(url="/login", status_code=303)
+    file_path = None
+    if file and file.filename:
+        ext = os.path.splitext(file.filename)[1] or ".bin"
+        safe_ext = ext if ext.lower() in (".pdf", ".png", ".jpg", ".jpeg", ".webp") else ".bin"
+        user_dir = os.path.join(UPLOAD_RECEIPTS_DIR, str(user_id))
+        os.makedirs(user_dir, exist_ok=True)
+        file_path = f"{user_id}/{uuid.uuid4().hex}{safe_ext}"
+        full_path = os.path.join(UPLOAD_RECEIPTS_DIR, file_path)
+        content = await file.read()
+        with open(full_path, "wb") as f:
+            f.write(content)
+    crud.create_receipt(
+        db, user_id=user_id, date=receipt_date, amount=amount,
+        description=description.strip() or None if description else None, file_path=file_path,
+    )
+    return RedirectResponse(url="/receipts", status_code=303)
+
+
+@app.get("/tax", response_class=HTMLResponse)
+def tax_page(
+    request: Request,
+    income: str | None = None,
+    db: Session = Depends(get_db),
+    user_id: int | None = Depends(get_current_user_id),
+) -> HTMLResponse:
+    user = request.session.get("user")
+    if not user or user_id is None:
+        return RedirectResponse(url="/login", status_code=303)
+    tax_result = None
+    if income is not None:
+        try:
+            annual = float(income)
+            if annual >= 0:
+                tax_result = tax_calc.calculate_tax(annual)
+        except ValueError:
+            pass
+    payslips = crud.list_payslips_for_user(db, user_id)
+    return templates.TemplateResponse(
+        "tax.html",
+        {
+            "request": request,
+            "username": user,
+            "tax_result": tax_result,
+            "payslips": payslips,
+        },
+    )
+
+
+@app.post("/tax/payslips", response_model=None, response_class=HTMLResponse)
+async def tax_payslip_upload(
+    request: Request,
+    file: UploadFile = File(...),
+    period_label: str | None = Form(None),
+    db: Session = Depends(get_db),
+    user_id: int | None = Depends(get_current_user_id),
+):
+    user = request.session.get("user")
+    if not user or user_id is None:
+        return RedirectResponse(url="/login", status_code=303)
+    if not file.filename or not file.content_type:
+        return RedirectResponse(url="/tax", status_code=303)
+    ext = os.path.splitext(file.filename)[1] or ".pdf"
+    safe_ext = ext if ext.lower() in (".pdf", ".png", ".jpg", ".jpeg") else ".pdf"
+    user_dir = os.path.join(UPLOAD_PAYSLIPS_DIR, str(user_id))
+    os.makedirs(user_dir, exist_ok=True)
+    file_path = f"{user_id}/{uuid.uuid4().hex}{safe_ext}"
+    full_path = os.path.join(UPLOAD_PAYSLIPS_DIR, file_path)
+    content = await file.read()
+    with open(full_path, "wb") as f:
+        f.write(content)
+    crud.create_payslip(db, user_id=user_id, file_path=file_path, period_label=period_label)
+    return RedirectResponse(url="/tax", status_code=303)
+
+
+@app.get("/tax/payslips/{payslip_id}/file")
+def payslip_file(
+    payslip_id: int,
+    db: Session = Depends(get_db),
+    user_id: int | None = Depends(get_current_user_id),
+) -> FileResponse:
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    payslip = db.query(models.Payslip).filter(
+        models.Payslip.id == payslip_id,
+        models.Payslip.user_id == user_id,
+    ).first()
+    if not payslip:
+        raise HTTPException(status_code=404, detail="Not found")
+    full_path = os.path.join(UPLOAD_PAYSLIPS_DIR, payslip.file_path)
+    if not os.path.isfile(full_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(full_path, filename=os.path.basename(payslip.file_path))
+
+
+@app.get("/credit", response_class=HTMLResponse)
+def credit_page(
+    request: Request,
+    user_id: int | None = Depends(get_current_user_id),
+):
+    user = request.session.get("user")
+    if not user or user_id is None:
+        return RedirectResponse(url="/login", status_code=303)
+    return templates.TemplateResponse(
+        "credit.html",
+        {"request": request, "username": user},
+    )
+
+
+@app.get("/receipts/{receipt_id}/file")
+def receipt_file(
+    receipt_id: int,
+    db: Session = Depends(get_db),
+    user_id: int | None = Depends(get_current_user_id),
+) -> FileResponse:
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    receipt = db.query(models.Receipt).filter(
+        models.Receipt.id == receipt_id,
+        models.Receipt.user_id == user_id,
+    ).first()
+    if not receipt or not receipt.file_path:
+        raise HTTPException(status_code=404, detail="File not found")
+    full_path = os.path.join(UPLOAD_RECEIPTS_DIR, receipt.file_path)
+    if not os.path.isfile(full_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(full_path, filename=os.path.basename(receipt.file_path))
+
+
 @app.post("/bank-accounts", response_model=schemas.BankAccountRead)
 def create_bank_account(
+    request: Request,
     data: schemas.BankAccountCreate,
     db: Session = Depends(get_db),
+    user_id: int | None = Depends(get_current_user_id),
 ) -> schemas.BankAccountRead:
-    return crud.create_bank_account(db, data)
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return crud.create_bank_account(db, user_id, data)
 
 
 @app.post(

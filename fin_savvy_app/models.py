@@ -15,6 +15,10 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
+    bank_accounts = relationship("BankAccount", back_populates="user")
+    receipts = relationship("Receipt", back_populates="user")
+    payslips = relationship("Payslip", back_populates="user")
+
 
 class PasswordResetToken(Base):
     __tablename__ = "password_reset_tokens"
@@ -30,11 +34,13 @@ class BankAccount(Base):
     __tablename__ = "bank_accounts"
 
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     name = Column(String(100), nullable=False)
     institution = Column(String(100), nullable=False)
     account_type = Column(String(50), nullable=True)
     currency = Column(String(10), nullable=False, default="ZAR")
 
+    user = relationship("User", back_populates="bank_accounts")
     statements = relationship("Statement", back_populates="bank_account")
 
 
@@ -76,4 +82,32 @@ class Transaction(Base):
 
     statement = relationship("Statement", back_populates="transactions")
     category = relationship("Category", back_populates="transactions")
+
+
+class Receipt(Base):
+    """Scanned receipt or invoice; used for cash-spend tracking and tax."""
+    __tablename__ = "receipts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    date = Column(Date, nullable=False)
+    amount = Column(Float, nullable=False)
+    description = Column(String(255), nullable=True)
+    file_path = Column(String(512), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="receipts")
+
+
+class Payslip(Base):
+    """Uploaded payslip for tax records."""
+    __tablename__ = "payslips"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    file_path = Column(String(512), nullable=False)
+    period_label = Column(String(100), nullable=True)
+    uploaded_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="payslips")
 

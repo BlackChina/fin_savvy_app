@@ -20,6 +20,9 @@ build/
 *.db
 *.sqlite3
 
+# Uploaded user data (receipts, payslips)
+fin_savvy_app/uploads/
+
 # IDE and OS
 .idea/
 .vscode/

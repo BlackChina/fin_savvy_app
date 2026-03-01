@@ -5,7 +5,7 @@ from typing import Iterable
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from . import auth, models, schemas
+from . import auth, classifier, models, schemas
 
 
 def get_user_by_username(db: Session, username: str) -> models.User | None:
@@ -71,8 +71,9 @@ def update_user_password(db: Session, user_id: int, new_password: str) -> None:
         db.commit()
 
 
-def create_bank_account(db: Session, data: schemas.BankAccountCreate) -> models.BankAccount:
+def create_bank_account(db: Session, user_id: int, data: schemas.BankAccountCreate) -> models.BankAccount:
     account = models.BankAccount(
+        user_id=user_id,
         name=data.name,
         institution=data.institution,
         account_type=data.account_type,
@@ -82,6 +83,14 @@ def create_bank_account(db: Session, data: schemas.BankAccountCreate) -> models.
     db.commit()
     db.refresh(account)
     return account
+
+
+def get_bank_account_for_user(db: Session, account_id: int, user_id: int) -> models.BankAccount | None:
+    return (
+        db.query(models.BankAccount)
+        .filter(models.BankAccount.id == account_id, models.BankAccount.user_id == user_id)
+        .first()
+    )
 
 
 def create_statement_with_transactions(
@@ -123,8 +132,192 @@ def get_transactions_for_statement(
     )
 
 
-def list_bank_accounts(db: Session) -> list[models.BankAccount]:
-    return db.query(models.BankAccount).order_by(models.BankAccount.id).all()
+def list_bank_accounts(db: Session, user_id: int) -> list[models.BankAccount]:
+    return (
+        db.query(models.BankAccount)
+        .filter(models.BankAccount.user_id == user_id)
+        .order_by(models.BankAccount.id)
+        .all()
+    )
+
+
+def create_receipt(
+    db: Session,
+    user_id: int,
+    date: date,
+    amount: float,
+    description: str | None = None,
+    file_path: str | None = None,
+) -> models.Receipt:
+    r = models.Receipt(
+        user_id=user_id,
+        date=date,
+        amount=amount,
+        description=description,
+        file_path=file_path,
+    )
+    db.add(r)
+    db.commit()
+    db.refresh(r)
+    return r
+
+
+def list_receipts_for_user(
+    db: Session,
+    user_id: int,
+    period_start: date | None = None,
+    period_end: date | None = None,
+) -> list[models.Receipt]:
+    q = db.query(models.Receipt).filter(models.Receipt.user_id == user_id)
+    if period_start is not None:
+        q = q.filter(models.Receipt.date >= period_start)
+    if period_end is not None:
+        q = q.filter(models.Receipt.date <= period_end)
+    return q.order_by(models.Receipt.date.desc()).all()
+
+
+def get_cash_withdrawal_total_for_user(
+    db: Session,
+    user_id: int,
+    period_start: date,
+    period_end: date,
+) -> float:
+    total = (
+        db.query(func.coalesce(func.sum(func.abs(models.Transaction.amount)), 0.0))
+        .join(models.Statement)
+        .join(models.BankAccount)
+        .filter(
+            models.BankAccount.user_id == user_id,
+            models.Transaction.is_cash_withdrawal.is_(True),
+            models.Transaction.date >= period_start,
+            models.Transaction.date <= period_end,
+        )
+        .scalar()
+    )
+    return float(total or 0.0)
+
+
+def get_receipt_total_for_user(
+    db: Session,
+    user_id: int,
+    period_start: date,
+    period_end: date,
+) -> float:
+    total = (
+        db.query(func.coalesce(func.sum(models.Receipt.amount), 0.0))
+        .filter(
+            models.Receipt.user_id == user_id,
+            models.Receipt.date >= period_start,
+            models.Receipt.date <= period_end,
+        )
+        .scalar()
+    )
+    return float(total or 0.0)
+
+
+def create_payslip(
+    db: Session,
+    user_id: int,
+    file_path: str,
+    period_label: str | None = None,
+) -> models.Payslip:
+    p = models.Payslip(
+        user_id=user_id,
+        file_path=file_path,
+        period_label=period_label,
+    )
+    db.add(p)
+    db.commit()
+    db.refresh(p)
+    return p
+
+
+def list_payslips_for_user(db: Session, user_id: int) -> list[models.Payslip]:
+    return (
+        db.query(models.Payslip)
+        .filter(models.Payslip.user_id == user_id)
+        .order_by(models.Payslip.uploaded_at.desc())
+        .all()
+    )
+
+
+def get_party_totals(
+    db: Session,
+    account_id: int,
+    direction: str,
+    sort_by: str = "total",
+    period_start: date | None = None,
+    period_end: date | None = None,
+) -> list[tuple[str, float, int, date]]:
+    """Returns list of (description_raw, total_amount, count, last_date) for the account.
+    If period_start and period_end are given, filters to that period only.
+    sort_by: 'total' (by cumulative amount) or 'recent' (by last date).
+    """
+    q = (
+        db.query(
+            models.Transaction.description_raw,
+            func.sum(func.abs(models.Transaction.amount)).label("total"),
+            func.count(models.Transaction.id).label("cnt"),
+            func.max(models.Transaction.date).label("last_date"),
+        )
+        .join(models.Statement)
+        .filter(
+            models.Statement.bank_account_id == account_id,
+            models.Transaction.direction == direction,
+        )
+    )
+    if period_start is not None:
+        q = q.filter(models.Transaction.date >= period_start)
+    if period_end is not None:
+        q = q.filter(models.Transaction.date <= period_end)
+    q = q.group_by(models.Transaction.description_raw)
+    if sort_by == "recent":
+        q = q.order_by(func.max(models.Transaction.date).desc())
+    else:
+        q = q.order_by(func.sum(func.abs(models.Transaction.amount)).desc())
+    rows = q.limit(50).all()
+    return [(r.description_raw, float(r.total), int(r.cnt), r.last_date) for r in rows]
+
+
+def get_party_totals_by_party(
+    db: Session,
+    account_id: int,
+    direction: str,
+    sort_by: str = "total",
+    period_start: date | None = None,
+    period_end: date | None = None,
+) -> list[tuple[str, float, int, date]]:
+    """Like get_party_totals but groups by resolved party name (from description keywords).
+    Returns list of (party_name, total_amount, count, last_date).
+    """
+    q = (
+        db.query(models.Transaction)
+        .join(models.Statement)
+        .filter(
+            models.Statement.bank_account_id == account_id,
+            models.Transaction.direction == direction,
+        )
+    )
+    if period_start is not None:
+        q = q.filter(models.Transaction.date >= period_start)
+    if period_end is not None:
+        q = q.filter(models.Transaction.date <= period_end)
+    rows = q.all()
+    # Group by party name in Python
+    agg: dict[str, tuple[float, int, date]] = {}
+    for t in rows:
+        party = classifier.get_party_name(t.description_raw)
+        amt = abs(t.amount)
+        if party not in agg:
+            agg[party] = (0.0, 0, t.date)
+        total, cnt, last = agg[party]
+        agg[party] = (total + amt, cnt + 1, max(last, t.date) if last else t.date)
+    out = [(party, total, cnt, last) for party, (total, cnt, last) in agg.items()]
+    if sort_by == "recent":
+        out.sort(key=lambda x: x[3] or date.min, reverse=True)
+    else:
+        out.sort(key=lambda x: x[1], reverse=True)
+    return out[:50]
 
 
 def get_available_months(db: Session, account_id: int) -> list[tuple[int, int]]:

@@ -10,16 +10,23 @@ services:
       - db_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fin_savvy_user -d fin_savvy"]
+      interval: 3s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
 
   app:
     build: .
     restart: unless-stopped
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql+psycopg2://fin_savvy_user:fin_savvy_password@db:5432/fin_savvy
     ports:
-      - "8000:8000"
+      - "8001:8000"
     volumes:
       - ./fin_savvy_app:/app/fin_savvy_app
 

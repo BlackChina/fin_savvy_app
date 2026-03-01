@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Fin Savvy – Tax</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        margin: 0;
+        padding: 0;
+        background: #0f172a url("/static/bg.jpeg") center/cover no-repeat fixed;
+        min-height: 100vh;
+        color: #e5e7eb;
+      }
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.85);
+        z-index: -1;
+      }
+      header {
+        padding: 1.2rem 2rem;
+        background: #020617;
+        border-bottom: 1px solid #1f2937;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      header h1 { margin: 0; font-size: 1.4rem; }
+      .user-area { display: flex; align-items: center; gap: 0.75rem; font-size: 0.8rem; }
+      .logout-button {
+        background: transparent;
+        border-radius: 999px;
+        border: 1px solid #374151;
+        color: #9ca3af;
+        padding: 0.25rem 0.7rem;
+        font-size: 0.75rem;
+        cursor: pointer;
+      }
+      nav { display: flex; gap: 0.5rem; margin: 1rem 2rem; }
+      nav a { color: #9ca3af; text-decoration: none; font-size: 0.9rem; }
+      nav a:hover { color: #e5e7eb; }
+      main { padding: 2rem; max-width: 560px; }
+      .card {
+        background: #020617;
+        border-radius: 0.75rem;
+        padding: 1.5rem 2rem;
+        border: 1px solid #1f2937;
+        margin-bottom: 1.5rem;
+      }
+      h2 { margin: 0 0 1rem; font-size: 1.1rem; }
+      .field { margin-bottom: 1rem; }
+      label { display: block; font-size: 0.85rem; margin-bottom: 0.35rem; color: #9ca3af; }
+      input[type="number"], input[type="text"] {
+        width: 100%;
+        padding: 0.5rem 0.7rem;
+        border-radius: 0.5rem;
+        border: 1px solid #374151;
+        background: #020617;
+        color: #e5e7eb;
+        font-size: 0.9rem;
+        box-sizing: border-box;
+      }
+      input[type="file"] { padding: 0.5rem 0; color: #9ca3af; }
+      button[type="submit"] {
+        padding: 0.6rem 1.2rem;
+        border-radius: 0.6rem;
+        border: none;
+        background: linear-gradient(135deg, #22c55e, #0ea5e9);
+        color: #0b1120;
+        font-weight: 600;
+        cursor: pointer;
+        margin-top: 0.5rem;
+      }
+      .tax-result { margin-top: 1rem; padding: 1rem; background: #111827; border-radius: 0.5rem; font-size: 0.9rem; }
+      .tax-result .row { display: flex; justify-content: space-between; margin-bottom: 0.5rem; }
+      .tax-result .take-home { font-size: 1.1rem; font-weight: 600; color: #22c55e; margin-top: 0.75rem; }
+      .hint { font-size: 0.85rem; color: #9ca3af; margin-bottom: 1rem; }
+      .payslip-list { list-style: none; padding: 0; margin: 0; }
+      .payslip-list li { padding: 0.5rem 0; border-bottom: 1px solid #1f2937; display: flex; justify-content: space-between; align-items: center; }
+      .payslip-list a { color: #38bdf8; font-size: 0.9rem; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Fin Savvy</h1>
+      <div class="user-area">
+        <span>{{ username }}</span>
+        <form method="post" action="/logout" style="margin: 0;">
+          <button type="submit" class="logout-button">Log out</button>
+        </form>
+      </div>
+    </header>
+
+    <nav>
+      <a href="/">Dashboard</a>
+      <a href="/upload">Upload statement</a>
+      <a href="/receipts">Receipts</a>
+      <a href="/tax" style="color: #e5e7eb;">Tax</a>
+      <a href="/credit">Credit score</a>
+    </nav>
+
+    <main>
+      <div class="card">
+        <h2>Tax calculator (SA 2025)</h2>
+        <p class="hint">Estimate income tax for the year. Enter your annual taxable income (ZAR).</p>
+        <form method="get" action="/tax">
+          <div class="field">
+            <label for="income">Annual taxable income (R)</label>
+            <input type="number" name="income" id="income" step="1000" min="0" placeholder="e.g. 500000" />
+          </div>
+          <button type="submit">Calculate</button>
+        </form>
+        {% if tax_result %}
+        <div class="tax-result">
+          <div class="row"><span>Annual income</span><span>R {{ "{:,.2f}".format(tax_result.annual_income) }}</span></div>
+          <div class="row"><span>Estimated tax (after rebate)</span><span>R {{ "{:,.2f}".format(tax_result.estimated_tax) }}</span></div>
+          <div class="row"><span>Effective rate</span><span>{{ tax_result.effective_rate_pct }}%</span></div>
+          <div class="row take-home"><span>Take-home (approx)</span><span>R {{ "{:,.2f}".format(tax_result.take_home) }}</span></div>
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="card">
+        <h2>Payslips</h2>
+        <p class="hint">Upload payslips for your tax records.</p>
+        <form method="post" action="/tax/payslips" enctype="multipart/form-data">
+          <div class="field">
+            <label for="period_label">Period (optional)</label>
+            <input type="text" name="period_label" id="period_label" placeholder="e.g. March 2025" />
+          </div>
+          <div class="field">
+            <label for="file">PDF or image</label>
+            <input type="file" name="file" id="file" accept=".pdf,.png,.jpg,.jpeg" required />
+          </div>
+          <button type="submit">Upload payslip</button>
+        </form>
+        {% if payslips %}
+        <ul class="payslip-list" style="margin-top: 1rem;">
+          {% for p in payslips %}
+          <li>
+            <span>{{ p.period_label or p.uploaded_at.strftime('%Y-%m-%d') }}</span>
+            <a href="/tax/payslips/{{ p.id }}/file" target="_blank" rel="noopener">View</a>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p style="color: #9ca3af; margin-top: 1rem;">No payslips uploaded yet.</p>
+        {% endif %}
+      </div>
+    </main>
+  </body>
+</html>

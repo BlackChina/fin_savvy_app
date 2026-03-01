@@ -205,6 +205,35 @@
         font-size: 0.85rem;
       }
       .generosity { color: #a78bfa; }
+      .category-bars { margin-top: 0.75rem; }
+      .category-row { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem; font-size: 0.85rem; }
+      .category-row .label { width: 100px; color: #9ca3af; }
+      .category-row .bar-wrap { flex: 1; height: 1.25rem; background: #1f2937; border-radius: 0.25rem; overflow: hidden; }
+      .category-row .bar { height: 100%; border-radius: 0.25rem; min-width: 2px; }
+      .category-row .bar.generosity { background: #a78bfa; }
+      .category-row .bar.discretionary { background: #f97316; }
+      .category-row .bar.other { background: #64748b; }
+      .category-row .value { width: 80px; text-align: right; }
+      .ledger-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.5rem;
+        margin-bottom: 1rem;
+      }
+      .ledger-column { padding: 1rem; border-radius: 0.5rem; border: 1px solid #1f2937; }
+      .ledger-credit { border-left: 4px solid #22c55e; }
+      .ledger-debit { border-left: 4px solid #f97316; }
+      .ledger-balance {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem 1rem;
+        background: #111827;
+        border-radius: 0.5rem;
+      }
+      .ledger-label { color: #9ca3af; font-size: 0.9rem; }
+      .ledger-value { font-size: 1.2rem; font-weight: 600; }
+      .chart-container { position: relative; height: 200px; }
     </style>
   </head>
   <body>
@@ -230,9 +259,21 @@
       <nav>
         <a href="/" class="active">Dashboard</a>
         <a href="/upload">Upload statement</a>
+        <a href="/receipts">Receipts</a>
+        <a href="/tax">Tax</a>
+        <a href="/credit">Credit score</a>
       </nav>
 
+      {% if no_accounts %}
+      <div class="card" style="max-width: 480px;">
+        <h2>No bank account yet</h2>
+        <p style="margin: 0 0 1rem; color: #9ca3af;">Add a bank account, then upload a statement to see your finances here.</p>
+        <p style="margin: 0; font-size: 0.9rem;"><a href="/upload" style="color: #38bdf8;">Go to Upload statement</a> to get started.</p>
+      </div>
+      {% else %}
       <form method="get" action="/" class="filters">
+        <input type="hidden" name="expense_sort" value="{{ expense_sort }}">
+        <input type="hidden" name="income_sort" value="{{ income_sort }}">
         <div>
           <label for="account_id">Account</label>
           <select name="account_id" id="account_id" onchange="this.form.submit()">
@@ -246,7 +287,7 @@
         {% if available_months %}
         <div>
           <label for="period">Period</label>
-          <select name="period" id="period" onchange="this.form.submit()">
+          <select name="period" id="period" onchange="this.form.submit()" autocomplete="off">
             {% for y, m in available_months %}
             <option value="{{ y }}-{{ '%02d'|format(m) }}" {% if year == y and month == m %}selected{% endif %}>
               {{ month_names[m] }} {{ y }}
@@ -257,6 +298,7 @@
         {% endif %}
       </form>
 
+      {% if not no_accounts %}
       <section class="summary-grid">
         <div class="card">
           <h2>Total income</h2>
@@ -284,30 +326,202 @@
           <h2>Discretionary</h2>
           <div class="value expense">R {{ discretionary_total | round(2) }}</div>
         </div>
+        <div class="card">
+          <h2>Cash withdrawn</h2>
+          <div class="value expense">R {{ cash_withdrawal_total | round(2) }}</div>
+        </div>
+        <div class="card">
+          <h2>Receipts (period)</h2>
+          <div class="value {% if cash_receipts_flag %}expense{% else %}income{% endif %}">
+            R {{ receipt_total | round(2) }}
+          </div>
+          <div style="font-size: 0.8rem; color: #9ca3af; margin-top: 0.25rem;">
+            {{ receipt_coverage_pct }}% of cash covered
+          </div>
+        </div>
+      </section>
+      {% if expense_by_category %}
+      {% set cat_vals = expense_by_category.values() | list %}
+      {% if cat_vals and (cat_vals | max) > 0 %}
+      {% set max_cat = cat_vals | max %}
+      <section class="card" style="margin-bottom: 1.5rem;">
+        <div class="section-title">
+          <h2>Spending by category</h2>
+          <span>This period (keyword-based)</span>
+        </div>
+        <div class="category-bars">
+          {% for cat_name, cat_total in expense_by_category.items() %}
+          {% if cat_total %}
+          <div class="category-row">
+            <span class="label">{{ cat_name }}</span>
+            <div class="bar-wrap">
+              <div class="bar {% if cat_name == 'Generosity' %}generosity{% elif cat_name == 'Discretionary' %}discretionary{% else %}other{% endif %}" style="width: {{ (100 * cat_total / max_cat) if max_cat > 0 else 0 }}%;"></div>
+            </div>
+            <span class="value">R {{ cat_total | round(2) }}</span>
+          </div>
+          {% endif %}
+          {% endfor %}
+        </div>
+      </section>
+      {% endif %}
+      {% endif %}
+      {% if cash_receipts_flag %}
+      <div class="card" style="border-color: #f97316; margin-bottom: 1.5rem;">
+        <h2 style="color: #f97316;">Unaccounted cash</h2>
+        <p style="margin: 0; color: #e5e7eb;">
+          Less than 80% of your cash withdrawals are covered by receipts this period. Keeping receipts helps avoid waste from small unrecorded spending.
+        </p>
+        <p style="margin: 0.5rem 0 0; font-size: 0.9rem;"><a href="/receipts" style="color: #38bdf8;">Add receipts</a></p>
+      </div>
+      {% endif %}
+
+      <section class="layout-grid">
+        <div class="card">
+          <div class="section-title">
+            <h2>Expenses</h2>
+            <span>{{ all_expenses|length }} this period</span>
+          </div>
+          <form method="get" action="/" class="filters" style="margin-bottom: 0.75rem;">
+            <input type="hidden" name="account_id" value="{{ account_id }}">
+            {% if year and month %}<input type="hidden" name="period" value="{{ year }}-{{ '%02d'|format(month) }}">{% endif %}
+            <input type="hidden" name="income_sort" value="{{ income_sort }}">
+            <label for="expense_sort">Sort:</label>
+            <select name="expense_sort" id="expense_sort" onchange="this.form.submit()">
+              <option value="date" {% if expense_sort == 'date' %}selected{% endif %}>By date</option>
+              <option value="amount" {% if expense_sort == 'amount' %}selected{% endif %}>By quantity</option>
+              <option value="date_category" {% if expense_sort == 'date_category' %}selected{% endif %}>By date and category</option>
+              <option value="amount_category" {% if expense_sort == 'amount_category' %}selected{% endif %}>By quantity and category</option>
+            </select>
+          </form>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 90px;">Date</th>
+                {% if expense_sort == 'date_category' or expense_sort == 'amount_category' %}<th style="width: 120px;">Category</th>{% endif %}
+                <th>Description</th>
+                <th style="width: 120px; text-align: right;">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for tx in all_expenses %}
+              <tr>
+                <td>{{ tx.date }}</td>
+                {% if expense_sort == 'date_category' or expense_sort == 'amount_category' %}<td><span class="badge">{{ expense_categories[loop.index0] }}</span></td>{% endif %}
+                <td>{{ tx.description_raw }}{% if tx.is_cash_withdrawal %} <span class="badge">Cash</span>{% endif %}</td>
+                <td style="text-align: right;" class="tx-amount-expense">R {{ (tx.amount * -1) | round(2) }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card">
+          <div class="section-title">
+            <h2>Income</h2>
+            <span>{{ all_income|length }} this period</span>
+          </div>
+          <form method="get" action="/" class="filters" style="margin-bottom: 0.75rem;">
+            <input type="hidden" name="account_id" value="{{ account_id }}">
+            {% if year and month %}<input type="hidden" name="period" value="{{ year }}-{{ '%02d'|format(month) }}">{% endif %}
+            <input type="hidden" name="expense_sort" value="{{ expense_sort }}">
+            <label for="income_sort">Sort:</label>
+            <select name="income_sort" id="income_sort" onchange="this.form.submit()">
+              <option value="date" {% if income_sort == 'date' %}selected{% endif %}>By date</option>
+              <option value="amount" {% if income_sort == 'amount' %}selected{% endif %}>By quantity</option>
+              <option value="date_category" {% if income_sort == 'date_category' %}selected{% endif %}>By date and category</option>
+              <option value="amount_category" {% if income_sort == 'amount_category' %}selected{% endif %}>By quantity and category</option>
+            </select>
+          </form>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 90px;">Date</th>
+                {% if income_sort == 'date_category' or income_sort == 'amount_category' %}<th style="width: 120px;">Category</th>{% endif %}
+                <th>Description</th>
+                <th style="width: 120px; text-align: right;">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for tx in all_income %}
+              <tr>
+                <td>{{ tx.date }}</td>
+                {% if income_sort == 'date_category' or income_sort == 'amount_category' %}<td><span class="badge">{{ income_categories[loop.index0] }}</span></td>{% endif %}
+                <td>{{ tx.description_raw }}</td>
+                <td style="text-align: right;" class="tx-amount-income">R {{ tx.amount | round(2) }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card" style="margin-bottom: 1.5rem;">
+        <h2 style="margin: 0 0 1rem;">Debit & Credit ledger</h2>
+        <p style="margin: 0 0 1rem; color: #9ca3af; font-size: 0.9rem;">Income vs expenses for {{ period_label }}.</p>
+        <div class="ledger-grid">
+          <div class="ledger-column ledger-credit">
+            <h3 style="margin: 0 0 0.5rem; font-size: 0.95rem; color: #22c55e;">Credit (Income)</h3>
+            <div class="ledger-value income">R {{ total_income | round(2) }}</div>
+          </div>
+          <div class="ledger-column ledger-debit">
+            <h3 style="margin: 0 0 0.5rem; font-size: 0.95rem; color: #f97316;">Debit (Expenses)</h3>
+            <div class="ledger-value expense">R {{ (total_expense * -1) | round(2) }}</div>
+          </div>
+        </div>
+        <div class="ledger-balance">
+          <span class="ledger-label">Balance (end of month):</span>
+          <span class="ledger-value {% if net >= 0 %}net-positive{% else %}net-negative{% endif %}">R {{ net | round(2) }}</span>
+        </div>
+        {% if net < 0 %}
+        <div class="ledger-warning" style="margin-top: 1rem; padding: 0.75rem; background: rgba(249, 115, 22, 0.15); border-radius: 0.5rem; border-left: 4px solid #f97316;">
+          <strong style="color: #f97316;">Imbalance:</strong> Spending exceeds income this period. {{ (total_expense * -1 - total_income) | round(2) }} more spent than available.
+        </div>
+        {% elif net == 0 %}
+        <div class="ledger-warning" style="margin-top: 1rem; padding: 0.75rem; background: rgba(249, 115, 22, 0.15); border-radius: 0.5rem; border-left: 4px solid #f97316;">
+          <strong style="color: #f97316;">Break-even:</strong> Expenses equal income this period.
+        </div>
+        {% endif %}
+      </section>
+
+      <section class="layout-grid" style="margin-bottom: 1.5rem;">
+        <div class="card">
+          <h2 style="margin: 0 0 1rem;">Income activity</h2>
+          <p style="margin: 0 0 1rem; color: #9ca3af; font-size: 0.85rem;">Daily income for {{ period_label }}.</p>
+          <div class="chart-container">
+            <canvas id="incomeChart" height="200"></canvas>
+          </div>
+        </div>
+        <div class="card">
+          <h2 style="margin: 0 0 1rem;">Expense activity</h2>
+          <p style="margin: 0 0 1rem; color: #9ca3af; font-size: 0.85rem;">Daily expenses for {{ period_label }}.</p>
+          <div class="chart-container">
+            <canvas id="expenseChart" height="200"></canvas>
+          </div>
+        </div>
       </section>
 
       <section class="layout-grid">
         <div class="card">
           <div class="section-title">
-            <h2>Largest expenses</h2>
-            <span>Top {{ top_expenses|length }} by amount</span>
+            <h2>Parties you pay</h2>
+            <span>{{ period_label }}</span>
           </div>
           <table>
             <thead>
               <tr>
-                <th style="width: 90px;">Date</th>
-                <th>Description</th>
-                <th style="width: 120px; text-align: right;">Amount</th>
+                <th>Party</th>
+                <th style="width: 70px; text-align: center;">#</th>
+                <th style="width: 120px; text-align: right;">Total paid</th>
+                <th style="width: 95px;">Last</th>
               </tr>
             </thead>
             <tbody>
-              {% for tx in top_expenses %}
+              {% for party in parties_outgoing %}
               <tr>
-                <td>{{ tx.date }}</td>
-                <td>{{ tx.description_raw }}</td>
-                <td style="text-align: right;" class="tx-amount-expense">
-                  R {{ (tx.amount * -1) | round(2) }}
-                </td>
+                <td>{{ party[0] }}</td>
+                <td style="text-align: center;">{{ party[2] }}</td>
+                <td style="text-align: right;" class="tx-amount-expense">R {{ party[1] | round(2) }}</td>
+                <td>{{ party[3] }}</td>
               </tr>
               {% endfor %}
             </tbody>
@@ -316,37 +530,78 @@
 
         <div class="card">
           <div class="section-title">
-            <h2>Recent activity</h2>
-            <span>Last {{ recent_tx|length }} transactions</span>
+            <h2>Parties you receive from</h2>
+            <span>{{ period_label }}</span>
           </div>
           <table>
             <thead>
               <tr>
-                <th style="width: 90px;">Date</th>
-                <th>Description</th>
-                <th style="width: 120px; text-align: right;">Amount</th>
+                <th>Party</th>
+                <th style="width: 70px; text-align: center;">#</th>
+                <th style="width: 120px; text-align: right;">Total received</th>
+                <th style="width: 95px;">Last</th>
               </tr>
             </thead>
             <tbody>
-              {% for tx in recent_tx %}
+              {% for party in parties_incoming %}
               <tr>
-                <td>{{ tx.date }}</td>
-                <td>
-                  {{ tx.description_raw }}
-                  {% if tx.is_cash_withdrawal %}
-                  <span class="badge">Cash</span>
-                  {% endif %}
-                </td>
-                <td style="text-align: right;" class="{% if tx.amount < 0 %}tx-amount-expense{% else %}tx-amount-income{% endif %}">
-                  {% if tx.amount < 0 %}-{% else %}+{% endif %}R {{ (tx.amount | abs) | round(2) }}
-                </td>
+                <td>{{ party[0] }}</td>
+                <td style="text-align: center;">{{ party[2] }}</td>
+                <td style="text-align: right;" class="tx-amount-income">R {{ party[1] | round(2) }}</td>
+                <td>{{ party[3] }}</td>
               </tr>
               {% endfor %}
             </tbody>
           </table>
         </div>
       </section>
+      {% endif %}
+      {% endif %}
     </main>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script>
+      (function() {
+        var incomeLabels = {{ chart_income_labels_json | safe }};
+        var incomeData = {{ chart_income_data_json | safe }};
+        var expenseLabels = {{ chart_expense_labels_json | safe }};
+        var expenseData = {{ chart_expense_data_json | safe }};
+        function shortDate(iso) {
+          var d = new Date(iso);
+          return d.getDate() + '/' + (d.getMonth() + 1);
+        }
+        var shortIncomeLabels = incomeLabels.map(shortDate);
+        var shortExpenseLabels = expenseLabels.map(shortDate);
+        var chartOpts = {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { color: '#9ca3af', maxRotation: 45 }, grid: { color: '#1f2937' } },
+            y: { ticks: { color: '#9ca3af' }, grid: { color: '#1f2937' } }
+          }
+        };
+        if (document.getElementById('incomeChart') && incomeLabels.length) {
+          new Chart(document.getElementById('incomeChart'), {
+            type: 'bar',
+            data: {
+              labels: shortIncomeLabels,
+              datasets: [{ data: incomeData, backgroundColor: 'rgba(34, 197, 94, 0.6)', borderColor: '#22c55e', borderWidth: 1 }]
+            },
+            options: chartOpts
+          });
+        }
+        if (document.getElementById('expenseChart') && expenseLabels.length) {
+          new Chart(document.getElementById('expenseChart'), {
+            type: 'bar',
+            data: {
+              labels: shortExpenseLabels,
+              datasets: [{ data: expenseData, backgroundColor: 'rgba(249, 115, 22, 0.6)', borderColor: '#f97316', borderWidth: 1 }]
+            },
+            options: chartOpts
+          });
+        }
+      })();
+    </script>
   </body>
 </html>
 

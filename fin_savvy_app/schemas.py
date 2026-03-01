@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 
 from pydantic import BaseModel
@@ -42,6 +42,25 @@ class TransactionRead(BaseModel):
     direction: str
     is_cash_withdrawal: bool
     category_id: Optional[int] = None
+
+    class Config:
+        from_attributes = True
+
+
+class ReceiptCreate(BaseModel):
+    date: date
+    amount: float
+    description: Optional[str] = None
+
+
+class ReceiptRead(BaseModel):
+    id: int
+    user_id: int
+    date: date
+    amount: float
+    description: Optional[str] = None
+    file_path: Optional[str] = None
+    created_at: datetime
 
     class Config:
         from_attributes = True
