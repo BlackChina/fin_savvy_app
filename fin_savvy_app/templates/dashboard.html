@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Fin Savvy – Dashboard</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        margin: 0;
+        padding: 0;
+        background: #0f172a url("/static/bg.jpeg") center/cover no-repeat fixed;
+        min-height: 100vh;
+        color: #e5e7eb;
+      }
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.85);
+        z-index: -1;
+      }
+      header {
+        padding: 1.2rem 2rem;
+        background: #020617;
+        border-bottom: 1px solid #1f2937;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      header h1 {
+        margin: 0;
+        font-size: 1.4rem;
+      }
+      header span {
+        font-size: 0.9rem;
+        color: #9ca3af;
+      }
+      main {
+        padding: 1.5rem 2rem 3rem;
+      }
+      .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+      }
+      .card {
+        background: #020617;
+        border-radius: 0.75rem;
+        padding: 1rem 1.2rem;
+        border: 1px solid #1f2937;
+      }
+      .card h2 {
+        margin: 0 0 0.4rem;
+        font-size: 0.95rem;
+        font-weight: 500;
+        color: #9ca3af;
+      }
+      .card .value {
+        font-size: 1.4rem;
+        font-weight: 600;
+      }
+      .income {
+        color: #22c55e;
+      }
+      .expense {
+        color: #f97316;
+      }
+      .net-positive {
+        color: #22c55e;
+      }
+      .net-negative {
+        color: #f97316;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 0.5rem;
+        font-size: 0.85rem;
+      }
+      th,
+      td {
+        padding: 0.55rem 0.75rem;
+        text-align: left;
+      }
+      th {
+        font-weight: 500;
+        color: #9ca3af;
+        border-bottom: 1px solid #1f2937;
+        position: sticky;
+        top: 0;
+        background: #020617;
+      }
+      tbody tr:nth-child(even) {
+        background: #020617;
+      }
+      tbody tr:nth-child(odd) {
+        background: #020617;
+      }
+      tbody tr:hover {
+        background: #111827;
+      }
+      .tx-amount-expense {
+        color: #f97316;
+      }
+      .tx-amount-income {
+        color: #22c55e;
+      }
+      .badge {
+        display: inline-flex;
+        padding: 0.1rem 0.45rem;
+        border-radius: 999px;
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        border: 1px solid #374151;
+        color: #9ca3af;
+      }
+      .layout-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 2fr) minmax(0, 1.4fr);
+        gap: 1.5rem;
+      }
+      @media (max-width: 900px) {
+        .layout-grid {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+      .section-title {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        margin-bottom: 0.25rem;
+      }
+      .section-title h2 {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 500;
+      }
+      .section-title span {
+        font-size: 0.8rem;
+        color: #9ca3af;
+      }
+      .pill {
+        display: inline-flex;
+        padding: 0.15rem 0.6rem;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        border: 1px solid #374151;
+        color: #e5e7eb;
+      }
+      .user-area {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        font-size: 0.8rem;
+        color: #9ca3af;
+      }
+      .user-name {
+        font-weight: 500;
+        color: #e5e7eb;
+      }
+      .logout-button {
+        background: transparent;
+        border-radius: 999px;
+        border: 1px solid #374151;
+        color: #9ca3af;
+        padding: 0.25rem 0.7rem;
+        font-size: 0.75rem;
+        cursor: pointer;
+      }
+      .logout-button:hover {
+        background: #111827;
+      }
+      nav {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+      }
+      nav a {
+        color: #9ca3af;
+        text-decoration: none;
+        font-size: 0.9rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.4rem;
+      }
+      nav a:hover, nav a.active {
+        color: #e5e7eb;
+        background: #1f2937;
+      }
+      .filters {
+        display: flex;
+        gap: 0.75rem;
+        align-items: center;
+        margin-bottom: 1.5rem;
+        flex-wrap: wrap;
+      }
+      .filters label { font-size: 0.8rem; color: #9ca3af; }
+      .filters select {
+        padding: 0.35rem 0.6rem;
+        border-radius: 0.4rem;
+        border: 1px solid #374151;
+        background: #020617;
+        color: #e5e7eb;
+        font-size: 0.85rem;
+      }
+      .generosity { color: #a78bfa; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>Fin Savvy</h1>
+        <span>Account #{{ account_id }} &bull; {{ period_label }}</span>
+      </div>
+      <div class="user-area">
+        <span class="pill">
+          {{ month_name }} {{ year }}
+        </span>
+        {% if username %}
+        <span class="user-name">{{ username }}</span>
+        <form method="post" action="/logout" style="margin: 0;">
+          <button type="submit" class="logout-button">Log out</button>
+        </form>
+        {% endif %}
+      </div>
+    </header>
+
+    <main>
+      <nav>
+        <a href="/" class="active">Dashboard</a>
+        <a href="/upload">Upload statement</a>
+      </nav>
+
+      <form method="get" action="/" class="filters">
+        <div>
+          <label for="account_id">Account</label>
+          <select name="account_id" id="account_id" onchange="this.form.submit()">
+            {% for acc in accounts %}
+            <option value="{{ acc.id }}" {% if acc.id == account_id %}selected{% endif %}>
+              {{ acc.name }} ({{ acc.institution }})
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        {% if available_months %}
+        <div>
+          <label for="period">Period</label>
+          <select name="period" id="period" onchange="this.form.submit()">
+            {% for y, m in available_months %}
+            <option value="{{ y }}-{{ '%02d'|format(m) }}" {% if year == y and month == m %}selected{% endif %}>
+              {{ month_names[m] }} {{ y }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
+      </form>
+
+      <section class="summary-grid">
+        <div class="card">
+          <h2>Total income</h2>
+          <div class="value income">R {{ total_income | round(2) }}</div>
+        </div>
+        <div class="card">
+          <h2>Total expenses</h2>
+          <div class="value expense">R {{ (total_expense * -1) | round(2) }}</div>
+        </div>
+        <div class="card">
+          <h2>Net</h2>
+          <div class="value {% if net >= 0 %}net-positive{% else %}net-negative{% endif %}">
+            R {{ net | round(2) }}
+          </div>
+        </div>
+        <div class="card">
+          <h2>Transactions</h2>
+          <div class="value">{{ tx_count }}</div>
+        </div>
+        <div class="card">
+          <h2>Generosity</h2>
+          <div class="value generosity">R {{ generosity_total | round(2) }}</div>
+        </div>
+        <div class="card">
+          <h2>Discretionary</h2>
+          <div class="value expense">R {{ discretionary_total | round(2) }}</div>
+        </div>
+      </section>
+
+      <section class="layout-grid">
+        <div class="card">
+          <div class="section-title">
+            <h2>Largest expenses</h2>
+            <span>Top {{ top_expenses|length }} by amount</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 90px;">Date</th>
+                <th>Description</th>
+                <th style="width: 120px; text-align: right;">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for tx in top_expenses %}
+              <tr>
+                <td>{{ tx.date }}</td>
+                <td>{{ tx.description_raw }}</td>
+                <td style="text-align: right;" class="tx-amount-expense">
+                  R {{ (tx.amount * -1) | round(2) }}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card">
+          <div class="section-title">
+            <h2>Recent activity</h2>
+            <span>Last {{ recent_tx|length }} transactions</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 90px;">Date</th>
+                <th>Description</th>
+                <th style="width: 120px; text-align: right;">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for tx in recent_tx %}
+              <tr>
+                <td>{{ tx.date }}</td>
+                <td>
+                  {{ tx.description_raw }}
+                  {% if tx.is_cash_withdrawal %}
+                  <span class="badge">Cash</span>
+                  {% endif %}
+                </td>
+                <td style="text-align: right;" class="{% if tx.amount < 0 %}tx-amount-expense{% else %}tx-amount-income{% endif %}">
+                  {% if tx.amount < 0 %}-{% else %}+{% endif %}R {{ (tx.amount | abs) | round(2) }}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
+

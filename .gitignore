@@ -1,0 +1,40 @@
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Environment and secrets
+.env
+.env.local
+*.db
+*.sqlite3
+
+# IDE and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Stray / artifact files (e.g. from Docker or shell)
+/=
+/\[internal\]
+/exporting
+/extracting
+/naming
+/reading
+/resolve
+/resolving
+/transferring
+/unpacking
+sha256:*

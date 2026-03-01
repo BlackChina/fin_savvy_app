@@ -1,0 +1,27 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: fin_savvy
+      POSTGRES_USER: fin_savvy_user
+      POSTGRES_PASSWORD: fin_savvy_password
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgresql+psycopg2://fin_savvy_user:fin_savvy_password@db:5432/fin_savvy
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./fin_savvy_app:/app/fin_savvy_app
+
+volumes:
+  db_data:
