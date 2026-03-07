@@ -1,0 +1,68 @@
+description,category,party
+SPAR STORE 123,Groceries,Spar
+SPAR HYPER,Groceries,Spar
+SPAR SUPERMARKET,Groceries,Spar
+VODACOM DEBIT,Telecommunications,Vodacom
+VODACOM AIRTIME,Telecommunications,Vodacom
+TELKOM INTERNET,Utilities,Telkom
+TELKOM ACCOUNT,Telecommunications,Telkom
+CHECKERS HYPER,Groceries,Shoprite Checkers
+CHECKERS,Groceries,Checkers
+SHOPRITE,Groceries,Shoprite Checkers
+PICK N PAY,Groceries,Pick n Pay
+PNP HYPER,Groceries,Pick n Pay
+WOOLWORTHS FOOD,Groceries,Woolworths
+WOOLWORTHS,Groceries,Woolworths
+ENGEN GARAGE,Fuel,Engen
+ENGEN FUEL,Fuel,Engen
+SHELL GARAGE,Fuel,Shell
+SHELL FUEL,Fuel,Shell
+UBER EATS,Dining,Uber Eats
+MR D FOOD,Dining,Mr D Food
+MR D,Dining,Mr D Food
+NETFLIX,Entertainment,Netflix
+SPOTIFY,Entertainment,Spotify
+SHOWMAX,Entertainment,Showmax
+DSTV,Entertainment,DStv
+MULTICHOICE,Entertainment,MultiChoice
+ESKOM,Utilities,Eskom
+ESKOM ELECTRICITY,Utilities,Eskom
+CITY OF JHB,Utilities,City of JHB
+CAPITEC BANK,Bank Fees,Capitec Bank
+CAPITEC,Bank Fees,Capitec Bank
+STANDARD BANK,Bank Fees,Standard Bank
+FNB ATM,Bank Fees,FNB
+ABSA DEBIT,Bank Fees,Absa
+TAKEALOT,Shopping,Takealot
+TAKEALOT COM,Shopping,Takealot
+DEBONAIRS PIZZA,Dining,Debonairs Pizza
+DEBONAIRS,Dining,Debonairs Pizza
+STEERS,Dining,Steers
+KFC,Dining,KFC
+MCDONALD,Dining,McDonald's
+NANDO,Dining,Nando's
+WIMPY,Dining,Wimpy
+SPUR,Dining,Spur
+OCEAN BASKET,Dining,Ocean Basket
+PANAROTTI,Dining,Panarottis
+BOSSASOMERSET,Dining,Bossa
+BOSSA SOMERSET,Dining,Bossa
+BOSSA,Dining,Bossa
+ZONEFITNES,Personal Care,Gym
+ZONE FITNESS,Personal Care,Gym
+CLICKS,Health,Clicks
+DIS-CHEM,Health,Dis-Chem
+OLD MUTUAL,Insurance,Old Mutual
+DISCOVERY HEALTH,Health,Discovery
+MAKRO,Shopping,Makro
+GAME STORE,Shopping,Game
+EDGARS,Shopping,Edgars
+TRUWORTHS,Shopping,Truworths
+UBER RIDE,Transport,Uber
+BOLT,Transport,Bolt
+GAUTRAIN,Transport,Gautrain
+RENT PAYMENT,Rent,Landlord
+MORTGAGE,Rent,Bank
+SAVINGS DEPOSIT,Savings,Savings Acct
+CHARITY DONATION,Charity,Charity
+OTHER DEBIT,Other,Other Party

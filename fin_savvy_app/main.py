@@ -6,6 +6,8 @@ import json
 import os
 import uuid
 
+from jinja2 import Environment, FileSystemLoader
+
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -21,7 +23,19 @@ from .database import SessionLocal, init_db
 app = FastAPI(title="Fin Savvy API")
 
 BASE_DIR = os.path.dirname(__file__)
-templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
+_template_dir = os.path.join(BASE_DIR, "templates")
+
+
+def _format_currency(value: float | None) -> str:
+    """Format number with space as thousands separator and 2 decimals (e.g. 12 345.67)."""
+    if value is None:
+        return "0.00"
+    return f"{float(value):,.2f}".replace(",", " ")
+
+
+_jinja_env = Environment(loader=FileSystemLoader(_template_dir))
+_jinja_env.filters["format_currency"] = _format_currency
+templates = Jinja2Templates(env=_jinja_env)
 static_dir = os.path.join(BASE_DIR, "static")
 if os.path.isdir(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
@@ -418,12 +432,12 @@ def _render_dashboard(request, user, user_id, account_id, period, db, expense_so
     elif expense_sort == "date_category":
         all_expenses = sorted(
             all_expenses,
-            key=lambda t: (classifier.get_category_label(t.description_raw) or "Other", t.date, t.id),
+            key=lambda t: (classifier.get_category_label(t.description_raw, t.amount) or "Other", t.date, t.id),
         )
     elif expense_sort == "amount_category":
         all_expenses = sorted(
             all_expenses,
-            key=lambda t: (classifier.get_category_label(t.description_raw) or "Other", -abs(t.amount), t.id),
+            key=lambda t: (classifier.get_category_label(t.description_raw, t.amount) or "Other", -abs(t.amount), t.id),
         )
 
     income_q = (
@@ -442,22 +456,22 @@ def _render_dashboard(request, user, user_id, account_id, period, db, expense_so
     elif income_sort == "date_category":
         all_income = sorted(
             all_income,
-            key=lambda t: (classifier.get_category_label(t.description_raw) or "Other", t.date, t.id),
+            key=lambda t: (classifier.get_category_label(t.description_raw, t.amount) or "Other", t.date, t.id),
         )
     elif income_sort == "amount_category":
         all_income = sorted(
             all_income,
-            key=lambda t: (classifier.get_category_label(t.description_raw) or "Other", -t.amount, t.id),
+            key=lambda t: (classifier.get_category_label(t.description_raw, t.amount) or "Other", -t.amount, t.id),
         )
 
-    expense_categories = [classifier.get_category_label(t.description_raw) or "Other" for t in all_expenses]
-    income_categories = [classifier.get_category_label(t.description_raw) or "Other" for t in all_income]
+    expense_categories = [classifier.get_category_label(t.description_raw, t.amount) or "Other" for t in all_expenses]
+    income_categories = [classifier.get_category_label(t.description_raw, t.amount) or "Other" for t in all_income]
 
     category_names = classifier.get_all_category_names()
     expense_by_category: dict[str, float] = {name: 0.0 for name in category_names}
     expense_by_category["Other"] = 0.0
     for t in all_expenses:
-        label = classifier.get_category_label(t.description_raw) or "Other"
+        label = classifier.get_category_label(t.description_raw, t.amount) or "Other"
         expense_by_category[label] = expense_by_category.get(label, 0.0) + abs(t.amount)
 
     # Daily aggregates for timeseries charts
@@ -481,7 +495,7 @@ def _render_dashboard(request, user, user_id, account_id, period, db, expense_so
     # Pivot-style: build party summary + transaction list from current period data (all_expenses / all_income)
     party_to_expenses: dict[str, list] = {}
     for t in all_expenses:
-        party = classifier.get_party_name(t.description_raw)
+        party = classifier.get_party_name(t.description_raw, t.amount)
         party_to_expenses.setdefault(party, []).append(t)
     parties_outgoing_detailed = []
     for party_name, txs in party_to_expenses.items():
@@ -498,7 +512,7 @@ def _render_dashboard(request, user, user_id, account_id, period, db, expense_so
 
     party_to_income: dict[str, list] = {}
     for t in all_income:
-        party = classifier.get_party_name(t.description_raw)
+        party = classifier.get_party_name(t.description_raw, t.amount)
         party_to_income.setdefault(party, []).append(t)
     parties_incoming_detailed = []
     for party_name, txs in party_to_income.items():

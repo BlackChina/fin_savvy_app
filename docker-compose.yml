@@ -25,6 +25,7 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql+psycopg2://fin_savvy_user:fin_savvy_password@db:5432/fin_savvy
+      FINSAVVY_CLASSIFIER: local
     ports:
       - "8001:8000"
     volumes:

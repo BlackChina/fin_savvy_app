@@ -1,9 +1,13 @@
 """
-Keyword-based transaction categorisation and party resolution.
-Driven by your December 2025 spreadsheet: Description → Transaction Category, Description → Party Name.
-Expenses, Parties you pay, and Spending by category all use Description as the common key.
+Transaction categorisation and party resolution.
+- FINSAVVY_CLASSIFIER=local: use models trained from your CSV (train_classifier.py).
+- FINSAVVY_CLASSIFIER=openai: use OpenAI API (set OPENAI_API_KEY) when you're ready.
+- Otherwise: keyword rules (CATEGORY_KEYWORDS, PARTY_KEYWORDS).
 First match wins; order matters (more specific keywords first).
 """
+from __future__ import annotations
+
+from . import ml_classifier
 
 # December 2025: Transaction Category (from your spreadsheet column).
 # Keywords match bank Description so we assign the right category for Spending by category.
@@ -165,12 +169,17 @@ _GENEROSITY_KEYWORDS: set[str] = set()
 _DISCRETIONARY_KEYWORDS: set[str] = set()
 
 
-def get_party_name(description: str) -> str:
-    """Returns the first matching party name from PARTY_KEYWORDS, or the description itself."""
+def get_party_name(description: str, amount: float | None = None) -> str:
+    """Returns the party name: keyword match first, then ML if enabled and no match, else description."""
     d = (description or "").upper()
     for party_name, keywords in PARTY_KEYWORDS:
         if any(kw.upper() in d for kw in keywords):
             return party_name
+    if ml_classifier.is_ml_enabled():
+        cat_choices = get_all_category_names() + ["Other"]
+        _cat, party = ml_classifier.classify_with_ml(description, amount, cat_choices)
+        if party:
+            return party
     return (description or "").strip() or "Other"
 
 
@@ -184,12 +193,17 @@ def is_discretionary(description: str) -> bool:
     return any(kw in d for kw in _DISCRETIONARY_KEYWORDS)
 
 
-def get_category_label(description: str) -> str | None:
-    """Returns the first matching category name, or None (then treat as 'Other')."""
+def get_category_label(description: str, amount: float | None = None) -> str | None:
+    """Returns the category: keyword match first, then ML if enabled and no match, else None (Other)."""
     d = (description or "").upper()
     for name, keywords in CATEGORY_KEYWORDS:
         if any(kw.upper() in d for kw in keywords):
             return name
+    if ml_classifier.is_ml_enabled():
+        cat_choices = get_all_category_names() + ["Other"]
+        category, _party = ml_classifier.classify_with_ml(description, amount, cat_choices)
+        if category:
+            return category
     return None
 
 

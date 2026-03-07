@@ -23,6 +23,9 @@ build/
 # Uploaded user data (receipts, payslips)
 fin_savvy_app/uploads/
 
+# Local ML models (trained per user; CSV in data/ is committed)
+fin_savvy_app/data/*.joblib
+
 # IDE and OS
 .idea/
 .vscode/
