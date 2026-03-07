@@ -268,6 +268,8 @@ def _render_dashboard(request, user, user_id, account_id, period, db, expense_so
                 "chart_expense_data_json": "[]",
                 "parties_outgoing": [],
                 "parties_incoming": [],
+                "parties_outgoing_detailed": [],
+                "parties_incoming_detailed": [],
                 "username": user,
                 "no_accounts": True,
                 "cash_withdrawal_total": 0.0,
@@ -327,6 +329,8 @@ def _render_dashboard(request, user, user_id, account_id, period, db, expense_so
                 "chart_expense_data_json": "[]",
                 "parties_outgoing": [],
                 "parties_incoming": [],
+                "parties_outgoing_detailed": [],
+                "parties_incoming_detailed": [],
                 "username": user,
                 "no_accounts": False,
                 "cash_withdrawal_total": 0.0,
@@ -474,14 +478,44 @@ def _render_dashboard(request, user, user_id, account_id, period, db, expense_so
     chart_expense_labels = sorted(expense_by_day.keys())
     chart_expense_data = [expense_by_day[k] for k in chart_expense_labels]
 
-    parties_outgoing = crud.get_party_totals_by_party(
-        db, account_id, "EXPENSE", sort_by="total",
-        period_start=period_start, period_end=period_end,
-    )
-    parties_incoming = crud.get_party_totals_by_party(
-        db, account_id, "INCOME", sort_by="total",
-        period_start=period_start, period_end=period_end,
-    )
+    # Pivot-style: build party summary + transaction list from current period data (all_expenses / all_income)
+    party_to_expenses: dict[str, list] = {}
+    for t in all_expenses:
+        party = classifier.get_party_name(t.description_raw)
+        party_to_expenses.setdefault(party, []).append(t)
+    parties_outgoing_detailed = []
+    for party_name, txs in party_to_expenses.items():
+        total = sum(abs(t.amount) for t in txs)
+        last_date = max(t.date for t in txs)
+        parties_outgoing_detailed.append({
+            "party_name": party_name,
+            "total": total,
+            "count": len(txs),
+            "last_date": last_date,
+            "transactions": txs,
+        })
+    parties_outgoing_detailed.sort(key=lambda x: x["total"], reverse=True)
+
+    party_to_income: dict[str, list] = {}
+    for t in all_income:
+        party = classifier.get_party_name(t.description_raw)
+        party_to_income.setdefault(party, []).append(t)
+    parties_incoming_detailed = []
+    for party_name, txs in party_to_income.items():
+        total = sum(t.amount for t in txs)
+        last_date = max(t.date for t in txs)
+        parties_incoming_detailed.append({
+            "party_name": party_name,
+            "total": total,
+            "count": len(txs),
+            "last_date": last_date,
+            "transactions": txs,
+        })
+    parties_incoming_detailed.sort(key=lambda x: x["total"], reverse=True)
+
+    # Keep legacy list for any code that expects it
+    parties_outgoing = [(p["party_name"], p["total"], p["count"], p["last_date"]) for p in parties_outgoing_detailed]
+    parties_incoming = [(p["party_name"], p["total"], p["count"], p["last_date"]) for p in parties_incoming_detailed]
 
     period_label = f"{month_name[month]} {year}"
     month_names = {i: month_name[i] for i in range(1, 13)}
@@ -533,6 +567,8 @@ def _render_dashboard(request, user, user_id, account_id, period, db, expense_so
             "chart_expense_data_json": json.dumps(chart_expense_data),
             "parties_outgoing": parties_outgoing,
             "parties_incoming": parties_incoming,
+            "parties_outgoing_detailed": parties_outgoing_detailed,
+            "parties_incoming_detailed": parties_incoming_detailed,
             "no_accounts": False,
             "cash_withdrawal_total": float(cash_withdrawal_total),
             "receipt_total": float(receipt_total),

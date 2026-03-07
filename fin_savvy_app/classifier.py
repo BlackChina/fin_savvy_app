@@ -1,27 +1,166 @@
 """
 Keyword-based transaction categorisation and party resolution.
-Driven by your documents: Transaction column → Transaction C (category) and Party Name.
-Categories and parties below are taken from your document only.
-First match wins; order matters.
+Driven by your December 2025 spreadsheet: Description → Transaction Category, Description → Party Name.
+Expenses, Parties you pay, and Spending by category all use Description as the common key.
+First match wins; order matters (more specific keywords first).
 """
 
-# From your document: Transaction C column = category for each transaction.
-# Keywords below match the Transaction column (description) so we assign the right category.
+# December 2025: Transaction Category (from your spreadsheet column).
+# Keywords match bank Description so we assign the right category for Spending by category.
 CATEGORY_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
-    ("Salary", ("SALARY",)),
-    ("Revolving Loan", ("NPDMMTHI",)),
-    ("Returned Debit Order", ("RETURNED DEBIT", "RDO", "REJECTED", "RETURNED")),
-    ("Study Loan", ("STUDENT LOAN", "STUDY LOAN")),
-]
-# From your document: Party Name column = who the transaction is from/to.
-# Keywords match the Transaction column so we group by the party you specified.
-PARTY_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
-    ("BCX - Emeron", ("SALARY", "BCX", "EMERON")),
-    ("Sanelli Loans", ("NPDMMTHI", "SANELLI", "STUDENT LOAN", "STUDY LOAN")),
-    ("Zone Fitness", ("ZONEFITNES", "ZONE FITNESS")),
+    ("Telecommunications", ("VODACOM", "TELKOM", "MTN", "CELL C", "AIRTIME", "DATA", "MOBILE")),
+    ("Groceries", (
+        "SHOPRITE", "CHECKERS", "PICK N PAY", "PNP", "WOOLWORTHS", "SPAR", "OK FOODS",
+        "FOOD LOVER", "MAKRO", "GROCER", "HYPER",
+    )),
+    ("Fuel", ("ENGEN", "SHELL", "FUEL", "GARAGE", "BP ", "CALTEX", "SASOL")),
+    ("Transport", (
+        "UBER", "BOLT", "GAUTRAIN", "REA VAYA", "METROBUS", "TAXI", "PUBLIC TRANSPORT",
+        "CAR PAYMENT", "CAR MAINTENANCE",
+    )),
+    ("Rent", ("RENT", "LANDLORD", "MORTGAGE", "RATES", "TAXES")),
+    ("Utilities", (
+        "ESKOM", "ELECTRICITY", "CITY OF JHB", "WATER", "TELKOM", "INTERNET",
+        "RATES", "TAXES",
+    )),
+    ("Dining", (
+        "UBER EATS", "MR D FOOD", "DEBONAIRS", "STEERS", "KFC", "MCDONALD", "BURGER KING",
+        "NANDO", "WIMPY", "ROCOMAMAS", "SPUR", "OCEAN BASKET", "PANAROTTI", "NEWS CAFE",
+        "TIGER'S MILK", "HUSSAR", "MONTANA", "RESTAURANT", "TAKEAWAY", "DINING", "PIZZA",
+    )),
+    ("Shopping", (
+        "TAKEALOT", "EDGARS", "TRUWORTHS", "SPORTSCENE", "TOTALSPORTS", "STREET FEVER",
+        "ZARA", "H&M", "COTTON ON", "SUPERBALIST", "ZANDO", "SHEIN", "TEMU", "AMAZON",
+        "MAKRO", "GAME", "BUILDERS", "CASHBUILD", "LEROY", "OUTDOOR WAREHOUSE", "CAPE UNION",
+        "TRAPPERS", "CLICKS", "DIS-CHEM", "CLOTHING", "SHOES", "ELECTRONICS", "FURNITURE",
+        "HOME DECOR", "GARDEN", "PET STORE", "LIQUOR", "TOBACCO",
+    )),
+    ("Entertainment", (
+        "NETFLIX", "SPOTIFY", "SHOWMAX", "DSTV", "MULTICHOICE", "CINEMA", "MOVIE",
+        "CONCERT", "SPORTING EVENT", "TICKETS",
+    )),
+    ("Health", (
+        "CLINIC", "HOSPITAL", "PHARMACY", "DIS-CHEM", "CLICKS", "DOCTOR", "DENTIST",
+        "OPTOMETRIST", "DISCOVERY", "HEALTH", "MEDICAL", "PRESCRIPTION",
+    )),
+    ("Education", (
+        "SCHOOL", "UNIVERSITY", "TUITION", "TEXTBOOK", "STATIONERY", "STATIONARY",
+    )),
+    ("Insurance", (
+        "OLD MUTUAL", "MOMENTUM", "LIBERTY", "SANLAM", "INSURANCE", "CAR INSURANCE",
+    )),
+    ("Bank Fees", (
+        "CAPITEC", "STANDARD BANK", "ABSA", "FNB", "BANK", "ATM", "FEE", "DEBIT ORDER",
+    )),
+    ("Savings", ("SAVINGS", "SAVINGS ACCT", "DEPOSIT")),
+    ("Investments", ("SANLAM", "INVESTMENT", "INVEST")),
+    ("Personal Care", ("GYM", "HAIRDRESSER", "BARBER", "SPA", "SALON")),
+    ("Gifts", ("GIFT", "GIFT SHOP")),
+    ("Charity", ("CHARITY", "DONATION", "TITHE", "GIVENGAIN")),
+    ("Travel", ("FLIGHT", "AIRLINE", "HOTEL", "ACCOMMODATION", "HOLIDAY", "TRAVEL AGENT")),
 ]
 
-# Used only for legacy summary cards (Generosity / Discretionary); empty = no matches.
+# December 2025: Party Name (from your spreadsheet column).
+# Keywords match bank Description so Parties you pay groups by the party you specified.
+PARTY_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
+    ("Vodacom", ("VODACOM",)),
+    ("Shoprite Checkers", ("SHOPRITE", "CHECKERS HYPER", "CHECKERS ")),
+    ("Pick n Pay", ("PICK N PAY", "PNP ", "PNP HYPER")),
+    ("Checkers", ("CHECKERS",)),
+    ("Woolworths", ("WOOLWORTHS",)),
+    ("Engen", ("ENGEN",)),
+    ("Shell", ("SHELL",)),
+    ("Capitec Bank", ("CAPITEC",)),
+    ("Standard Bank", ("STANDARD BANK",)),
+    ("Absa", ("ABSA",)),
+    ("FNB", ("FNB",)),
+    ("Takealot", ("TAKEALOT",)),
+    ("Uber Eats", ("UBER EATS",)),
+    ("Mr D Food", ("MR D FOOD", "MR D ",)),
+    ("Netflix", ("NETFLIX",)),
+    ("Spotify", ("SPOTIFY",)),
+    ("Showmax", ("SHOWMAX",)),
+    ("DStv", ("DSTV",)),
+    ("Eskom", ("ESKOM",)),
+    ("City of JHB", ("CITY OF JHB", "CITY OF JOHANNESBURG", "COJ")),
+    ("Telkom", ("TELKOM",)),
+    ("MultiChoice", ("MULTICHOICE",)),
+    ("Old Mutual", ("OLD MUTUAL",)),
+    ("Sanlam", ("SANLAM",)),
+    ("Discovery", ("DISCOVERY",)),
+    ("Momentum", ("MOMENTUM",)),
+    ("Liberty", ("LIBERTY",)),
+    ("PnP", ("PNP",)),
+    ("Clicks", ("CLICKS",)),
+    ("Dis-Chem", ("DIS-CHEM", "DISCHEM")),
+    ("Edgars", ("EDGARS",)),
+    ("Truworths", ("TRUWORTHS",)),
+    ("Sportscene", ("SPORTSCENE",)),
+    ("Totalsports", ("TOTALSPORTS",)),
+    ("Street Fever", ("STREET FEVER",)),
+    ("Zara", ("ZARA",)),
+    ("H&M", ("H&M", "H & M")),
+    ("Cotton On", ("COTTON ON",)),
+    ("Superbalist", ("SUPERBALIST",)),
+    ("Zando", ("ZANDO",)),
+    ("Shein", ("SHEIN",)),
+    ("Temu", ("TEMU",)),
+    ("Amazon", ("AMAZON",)),
+    ("Uber", ("UBER ", "UBER RIDE")),  # after Uber Eats
+    ("Bolt", ("BOLT",)),
+    ("Gautrain", ("GAUTRAIN",)),
+    ("Rea Vaya", ("REA VAYA",)),
+    ("Metrobus", ("METROBUS",)),
+    ("Taxi", ("TAXI",)),
+    ("Spar", ("SPAR",)),
+    ("OK Foods", ("OK FOODS",)),
+    ("Food Lover's Market", ("FOOD LOVER",)),
+    ("Makro", ("MAKRO",)),
+    ("Game", ("GAME ", "GAME STORE")),
+    ("Builders Warehouse", ("BUILDERS",)),
+    ("Cashbuild", ("CASHBUILD",)),
+    ("Leroy Merlin", ("LEROY",)),
+    ("Outdoor Warehouse", ("OUTDOOR WHS", "OUTDOOR WAREHOUSE")),
+    ("Cape Union Mart", ("CAPE UNION",)),
+    ("Trappers Trading", ("TRAPPERS",)),
+    ("Montana Restaurant", ("MONTANA",)),
+    ("Debonairs Pizza", ("DEBONAIRS",)),
+    ("Steers", ("STEERS",)),
+    ("KFC", ("KFC",)),
+    ("McDonald's", ("MCDONALD",)),
+    ("Burger King", ("BURGER KING",)),
+    ("Nando's", ("NANDO",)),
+    ("Wimpy", ("WIMPY",)),
+    ("RocoMamas", ("ROCOMAMAS",)),
+    ("Spur", ("SPUR",)),
+    ("Ocean Basket", ("OCEAN BASKET",)),
+    ("Panarottis", ("PANAROTTI",)),
+    ("News Cafe", ("NEWS CAFE",)),
+    ("Tiger's Milk", ("TIGER'S MILK", "TIGERS MILK")),
+    ("Hussar Grill", ("HUSSAR",)),
+    ("Bossa", ("BOSSA", "BOSSASOMERSET", "BOSSA SOMERSET", "BOSSA SOMERSET WEST")),
+    ("Gym", ("GYM", "ZONEFITNES", "ZONE FITNESS")),
+    ("Hair Salon", ("HAIRDRESSER", "HAIR SALON")),
+    ("Barber Shop", ("BARBER",)),
+    ("Spa", ("SPA",)),
+    ("Landlord", ("RENT", "LANDLORD")),
+    ("Bank", ("MORTGAGE", "BANK TRANSFER", "STANDARD BANK", "FNB", "ABSA", "CAPITEC")),
+    ("Fuel Station", ("FUEL", "GARAGE")),
+    ("Car Insurance Co.", ("CAR INSURANCE",)),
+    ("Car Dealership", ("CAR PAYMENT",)),
+    ("Airline", ("FLIGHT", "AIRLINE")),
+    ("Hotel", ("HOTEL", "ACCOMMODATION")),
+    ("Travel Agent", ("HOLIDAY", "TRAVEL AGENT")),
+    ("Cinema", ("CINEMA", "MOVIE")),
+    ("Concert Venue", ("CONCERT",)),
+    ("Sporting Arena", ("SPORTING EVENT",)),
+    ("Charity", ("CHARITY", "DONATION", "TITHE", "GIVENGAIN")),
+    ("Gift Shop", ("GIFT SHOP",)),
+    ("Investment Firm", ("INVESTMENT", "INVEST")),
+    ("Savings Acct", ("SAVINGS",)),
+]
+
+# Legacy summary cards (Generosity / Discretionary); empty = no matches.
 _GENEROSITY_KEYWORDS: set[str] = set()
 _DISCRETIONARY_KEYWORDS: set[str] = set()
 
@@ -30,7 +169,7 @@ def get_party_name(description: str) -> str:
     """Returns the first matching party name from PARTY_KEYWORDS, or the description itself."""
     d = (description or "").upper()
     for party_name, keywords in PARTY_KEYWORDS:
-        if any(kw in d for kw in keywords):
+        if any(kw.upper() in d for kw in keywords):
             return party_name
     return (description or "").strip() or "Other"
 
@@ -49,7 +188,7 @@ def get_category_label(description: str) -> str | None:
     """Returns the first matching category name, or None (then treat as 'Other')."""
     d = (description or "").upper()
     for name, keywords in CATEGORY_KEYWORDS:
-        if any(kw in d for kw in keywords):
+        if any(kw.upper() in d for kw in keywords):
             return name
     return None
 

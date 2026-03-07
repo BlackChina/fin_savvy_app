@@ -234,6 +234,22 @@
       .ledger-label { color: #9ca3af; font-size: 0.9rem; }
       .ledger-value { font-size: 1.2rem; font-weight: 600; }
       .chart-container { position: relative; height: 200px; }
+      .party-summary-row { cursor: pointer; }
+      .party-summary-row:hover { background: #111827 !important; }
+      .drill-down-btn {
+        background: transparent;
+        border: 1px solid #374151;
+        color: #9ca3af;
+        padding: 0.2rem 0.5rem;
+        border-radius: 0.35rem;
+        font-size: 0.75rem;
+        cursor: pointer;
+      }
+      .drill-down-btn:hover { background: #1f2937; color: #e5e7eb; }
+      .party-drill-row td { padding: 0; border-top: none; vertical-align: top; }
+      .drill-table { margin: 0 0 0 1.5rem; width: calc(100% - 1.5rem); font-size: 0.8rem; }
+      .drill-table th { padding: 0.35rem 0.5rem; }
+      .drill-table td { padding: 0.35rem 0.5rem; }
     </style>
   </head>
   <body>
@@ -504,7 +520,7 @@
         <div class="card">
           <div class="section-title">
             <h2>Parties you pay</h2>
-            <span>{{ period_label }}</span>
+            <span>{{ period_label }} — click to drill down</span>
           </div>
           <table>
             <thead>
@@ -513,16 +529,46 @@
                 <th style="width: 70px; text-align: center;">#</th>
                 <th style="width: 120px; text-align: right;">Total paid</th>
                 <th style="width: 95px;">Last</th>
+                <th style="width: 140px;"></th>
               </tr>
             </thead>
             <tbody>
-              {% for party in parties_outgoing %}
-              <tr>
-                <td>{{ party[0] }}</td>
-                <td style="text-align: center;">{{ party[2] }}</td>
-                <td style="text-align: right;" class="tx-amount-expense">R {{ party[1] | round(2) }}</td>
-                <td>{{ party[3] }}</td>
+              {% for party in parties_outgoing_detailed %}
+              <tr class="party-summary-row" data-party-idx="{{ loop.index0 }}">
+                <td>{{ party.party_name }}</td>
+                <td style="text-align: center;">{{ party.count }}</td>
+                <td style="text-align: right;" class="tx-amount-expense">R {{ party.total | round(2) }}</td>
+                <td>{{ party.last_date }}</td>
+                <td>
+                  {% if party.transactions %}
+                  <button type="button" class="drill-down-btn" data-party-idx="{{ loop.index0 }}" aria-label="Toggle transactions">▼ Show transactions</button>
+                  {% endif %}
+                </td>
               </tr>
+              {% if party.transactions %}
+              <tr class="party-drill-row" id="party-drill-outgoing-{{ loop.index0 }}" style="display: none;">
+                <td colspan="5">
+                  <table class="drill-table">
+                    <thead>
+                      <tr>
+                        <th style="width: 90px;">Date</th>
+                        <th>Description</th>
+                        <th style="width: 100px; text-align: right;">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for tx in party.transactions %}
+                      <tr>
+                        <td>{{ tx.date }}</td>
+                        <td>{{ tx.description_raw }}{% if tx.is_cash_withdrawal %} <span class="badge">Cash</span>{% endif %}</td>
+                        <td style="text-align: right;" class="tx-amount-expense">R {{ (tx.amount * -1) | round(2) }}</td>
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </td>
+              </tr>
+              {% endif %}
               {% endfor %}
             </tbody>
           </table>
@@ -531,7 +577,7 @@
         <div class="card">
           <div class="section-title">
             <h2>Parties you receive from</h2>
-            <span>{{ period_label }}</span>
+            <span>{{ period_label }} — click to drill down</span>
           </div>
           <table>
             <thead>
@@ -540,16 +586,46 @@
                 <th style="width: 70px; text-align: center;">#</th>
                 <th style="width: 120px; text-align: right;">Total received</th>
                 <th style="width: 95px;">Last</th>
+                <th style="width: 140px;"></th>
               </tr>
             </thead>
             <tbody>
-              {% for party in parties_incoming %}
-              <tr>
-                <td>{{ party[0] }}</td>
-                <td style="text-align: center;">{{ party[2] }}</td>
-                <td style="text-align: right;" class="tx-amount-income">R {{ party[1] | round(2) }}</td>
-                <td>{{ party[3] }}</td>
+              {% for party in parties_incoming_detailed %}
+              <tr class="party-summary-row" data-party-idx-incoming="{{ loop.index0 }}">
+                <td>{{ party.party_name }}</td>
+                <td style="text-align: center;">{{ party.count }}</td>
+                <td style="text-align: right;" class="tx-amount-income">R {{ party.total | round(2) }}</td>
+                <td>{{ party.last_date }}</td>
+                <td>
+                  {% if party.transactions %}
+                  <button type="button" class="drill-down-btn" data-incoming="1" data-party-idx="{{ loop.index0 }}" aria-label="Toggle transactions">▼ Show transactions</button>
+                  {% endif %}
+                </td>
               </tr>
+              {% if party.transactions %}
+              <tr class="party-drill-row" id="party-drill-incoming-{{ loop.index0 }}" style="display: none;">
+                <td colspan="5">
+                  <table class="drill-table">
+                    <thead>
+                      <tr>
+                        <th style="width: 90px;">Date</th>
+                        <th>Description</th>
+                        <th style="width: 100px; text-align: right;">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for tx in party.transactions %}
+                      <tr>
+                        <td>{{ tx.date }}</td>
+                        <td>{{ tx.description_raw }}</td>
+                        <td style="text-align: right;" class="tx-amount-income">R {{ tx.amount | round(2) }}</td>
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </td>
+              </tr>
+              {% endif %}
               {% endfor %}
             </tbody>
           </table>
@@ -601,6 +677,18 @@
           });
         }
       })();
+      document.querySelectorAll('.drill-down-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var idx = this.getAttribute('data-party-idx');
+          var incoming = this.getAttribute('data-incoming');
+          var rowId = incoming ? 'party-drill-incoming-' + idx : 'party-drill-outgoing-' + idx;
+          var row = document.getElementById(rowId);
+          if (!row) return;
+          var isHidden = row.style.display === 'none';
+          row.style.display = isHidden ? 'table-row' : 'none';
+          this.textContent = isHidden ? '▲ Hide transactions' : '▼ Show transactions';
+        });
+      });
     </script>
   </body>
 </html>
