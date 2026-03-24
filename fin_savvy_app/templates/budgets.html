@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><title>Fin Savvy – Budgets</title>
+<style>
+body{font-family:system-ui,sans-serif;margin:0;background:#0f172a;color:#e5e7eb}
+header{padding:1.2rem 2rem;background:#020617;border-bottom:1px solid #1f2937;display:flex;justify-content:space-between;align-items:center}
+nav{display:flex;gap:.5rem;margin:1rem 2rem;flex-wrap:wrap}
+nav a{color:#9ca3af;text-decoration:none;font-size:.9rem}
+main{padding:2rem;max-width:640px}
+.card{background:#020617;border-radius:.75rem;padding:1.5rem 2rem;border:1px solid #1f2937;margin-bottom:1.5rem}
+h2{margin:0 0 1rem;font-size:1.1rem}
+label{display:block;font-size:.85rem;color:#9ca3af;margin-bottom:.35rem}
+input,select{width:100%;padding:.5rem;border-radius:.5rem;border:1px solid #374151;background:#020617;color:#e5e7eb;box-sizing:border-box;margin-bottom:1rem}
+button[type=submit]{padding:.55rem 1rem;border-radius:.5rem;border:none;background:linear-gradient(135deg,#22c55e,#0ea5e9);color:#0b1120;font-weight:600;cursor:pointer}
+table{width:100%;border-collapse:collapse;font-size:.9rem}
+th,td{padding:.5rem;text-align:left;border-bottom:1px solid #1f2937}
+.logout-button{background:transparent;border:1px solid #374151;color:#9ca3af;padding:.25rem .7rem;border-radius:999px;cursor:pointer;font-size:.75rem}
+.hint{color:#9ca3af;font-size:.88rem;margin-bottom:1rem}
+</style>
+</head>
+<body>
+<header><h1 style="margin:0;font-size:1.4rem">Fin Savvy</h1>
+<div style="display:flex;gap:.75rem;align-items:center;font-size:.85rem"><span>{{ username }}</span>
+<form method="post" action="/logout" style="margin:0"><button type="submit" class="logout-button">Log out</button></form></div></header>
+<nav>
+<a href="/">Dashboard</a><a href="/upload">Upload</a><a href="/receipts">Receipts</a>
+<a href="/budgets" style="color:#e5e7eb">Budgets</a><a href="/tax">Tax</a><a href="/credit">Credit</a><a href="/settings">Settings</a>
+</nav>
+<main>
+{% if not accounts %}
+<div class="card"><p>Add an account on <a href="/upload" style="color:#38bdf8">Upload</a>.</p></div>
+{% else %}
+<div class="card">
+<h2>Set budget</h2>
+<p class="hint">Category limits for the dashboard.</p>
+<form method="get" action="/budgets" style="margin-bottom:1rem;display:flex;gap:.75rem;flex-wrap:wrap;align-items:flex-end">
+<div style="flex:1;min-width:140px"><label>Account</label>
+<select name="account_id" onchange="this.form.submit()">{% for acc in accounts %}
+<option value="{{ acc.id }}" {% if acc.id == account_id %}selected{% endif %}>{{ acc.name }}</option>{% endfor %}
+</select></div>
+<div style="flex:1;min-width:140px"><label>Month</label>
+<input type="text" name="period" value="{{ period }}" pattern="\d{4}-\d{2}"/></div>
+<button type="submit">Load</button></form>
+<form method="post" action="/budgets">
+<input type="hidden" name="account_id" value="{{ account_id }}"/>
+<input type="hidden" name="year_month" value="{{ period }}"/>
+<label>Category</label>
+<select name="category_name" required>{% for c in categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}</select>
+<label>Limit R</label>
+<input type="number" name="amount_limit" step="0.01" min="0" required/>
+<label>Scope</label>
+<select name="scope"><option value="account">This account</option><option value="all">All accounts</option></select>
+<button type="submit">Save</button></form></div>
+<div class="card"><h2>Budgets {{ period }}</h2>
+{% if budgets %}
+<table><thead><tr><th>Category</th><th>Scope</th><th>Limit</th><th></th></tr></thead><tbody>
+{% for b in budgets %}<tr>
+<td>{{ b.category_name }}</td>
+<td>{% if b.bank_account_id %}Account{% else %}All{% endif %}</td>
+<td>R {{ b.amount_limit | format_currency }}</td>
+<td><form method="post" action="/budgets/{{ b.id }}/delete" style="margin:0">
+<input type="hidden" name="account_id" value="{{ account_id }}"/>
+<input type="hidden" name="period" value="{{ period }}"/>
+<button type="submit" style="background:#7f1d1d;color:#fecaca;border:none;padding:.25rem .5rem;border-radius:.35rem;cursor:pointer;font-size:.8rem">Remove</button>
+</form></td></tr>{% endfor %}</tbody></table>
+{% else %}<p style="color:#9ca3af">No budgets.</p>{% endif %}</div>
+{% endif %}
+</main></body></html>

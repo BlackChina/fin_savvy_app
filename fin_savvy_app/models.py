@@ -18,6 +18,7 @@ class User(Base):
     bank_accounts = relationship("BankAccount", back_populates="user")
     receipts = relationship("Receipt", back_populates="user")
     payslips = relationship("Payslip", back_populates="user")
+    monthly_budgets = relationship("MonthlyBudget", back_populates="user")
 
 
 class PasswordResetToken(Base):
@@ -82,6 +83,23 @@ class Transaction(Base):
 
     statement = relationship("Statement", back_populates="transactions")
     category = relationship("Category", back_populates="transactions")
+    linked_receipts = relationship("Receipt", back_populates="linked_transaction")
+
+
+class MonthlyBudget(Base):
+    """Per-user monthly spend limit for a classifier category (optional per bank account)."""
+
+    __tablename__ = "monthly_budgets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    bank_account_id = Column(Integer, ForeignKey("bank_accounts.id"), nullable=True)
+    category_name = Column(String(100), nullable=False)
+    year_month = Column(String(7), nullable=False)  # YYYY-MM
+    amount_limit = Column(Float, nullable=False)
+
+    user = relationship("User", back_populates="monthly_budgets")
+    bank_account = relationship("BankAccount")
 
 
 class Receipt(Base):
@@ -94,9 +112,15 @@ class Receipt(Base):
     amount = Column(Float, nullable=False)
     description = Column(String(255), nullable=True)
     file_path = Column(String(512), nullable=True)
+    transaction_id = Column(Integer, ForeignKey("transactions.id"), nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     user = relationship("User", back_populates="receipts")
+    linked_transaction = relationship(
+        "Transaction",
+        back_populates="linked_receipts",
+        foreign_keys=[transaction_id],
+    )
 
 
 class Payslip(Base):

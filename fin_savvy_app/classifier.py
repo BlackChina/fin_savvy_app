@@ -210,3 +210,8 @@ def get_category_label(description: str, amount: float | None = None) -> str | N
 def get_all_category_names() -> list[str]:
     """Returns all category names in order (for Spending by category and defaults)."""
     return [name for name, _ in CATEGORY_KEYWORDS]
+
+
+def get_all_party_names() -> list[str]:
+    """Party labels from keyword rules (for settings / budgets UI)."""
+    return [name for name, _ in PARTY_KEYWORDS]

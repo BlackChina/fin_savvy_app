@@ -67,8 +67,10 @@
       <a href="/">Dashboard</a>
       <a href="/upload">Upload statement</a>
       <a href="/receipts">Receipts</a>
+      <a href="/budgets">Budgets</a>
       <a href="/tax">Tax</a>
       <a href="/credit" style="color: #e5e7eb;">Credit score</a>
+      <a href="/settings">Settings</a>
     </nav>
 
     <main>
@@ -79,6 +81,15 @@
         </p>
         <p style="margin-top: 1rem;">
           This feature is coming soon. You will be able to link your profile to a bureau (e.g. Experian, TransUnion) or enter your score manually to track it over time.
+        </p>
+        <p style="margin-top: 1rem; font-size: 0.9rem; color: #9ca3af;">
+          <strong>API (for integrations):</strong>
+          <code style="color: #e5e7eb;">GET /api/credit/score</code> (session cookie required).
+          {% if credit_configured %}
+          <span style="color: #22c55e;">CREDIT_API_KEY is set</span> — wire your provider in <code>fin_savvy_app/credit_api.py</code>.
+          {% else %}
+          Set env <code>CREDIT_API_KEY</code> when you have a bureau contract; until then the endpoint returns a placeholder JSON.
+          {% endif %}
         </p>
       </div>
     </main>

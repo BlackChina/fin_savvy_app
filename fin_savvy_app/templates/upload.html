@@ -98,8 +98,10 @@
       <a href="/">Dashboard</a>
       <a href="/upload" style="color: #e5e7eb;">Upload statement</a>
       <a href="/receipts">Receipts</a>
+      <a href="/budgets">Budgets</a>
       <a href="/tax">Tax</a>
       <a href="/credit">Credit score</a>
+      <a href="/settings">Settings</a>
     </nav>
 
     <main>
@@ -125,9 +127,11 @@
       {% endif %}
 
       <div class="card">
-        <h2>Upload bank statement (PDF)</h2>
+        <h2>Upload bank statement (PDF or CSV)</h2>
         <p style="color: #9ca3af; font-size: 0.9rem; margin-bottom: 1.25rem;">
-          Upload a Standard Bank PDF statement. Transactions will be parsed and added to your dashboard.
+          Upload a <strong>Standard Bank PDF</strong> statement, or a <strong>CSV export</strong> with columns such as
+          <code style="color: #e5e7eb;">Date</code>, <code style="color: #e5e7eb;">Description</code>, <code style="color: #e5e7eb;">Amount</code>
+          (or separate <code style="color: #e5e7eb;">Debit</code> / <code style="color: #e5e7eb;">Credit</code>).
         </p>
 
         <form method="post" action="/upload" enctype="multipart/form-data">
@@ -151,8 +155,8 @@
             <input type="date" name="period_end" id="period_end" required />
           </div>
           <div class="field">
-            <label for="file">PDF file</label>
-            <input type="file" name="file" id="file" accept=".pdf,application/pdf" required />
+            <label for="file">Statement file</label>
+            <input type="file" name="file" id="file" accept=".pdf,.csv,application/pdf,text/csv" required />
           </div>
 
           <button type="submit" {% if not accounts %}disabled{% endif %}>Upload</button>

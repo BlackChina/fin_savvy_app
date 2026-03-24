@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Fin Savvy – Settings</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; background: #0f172a; color: #e5e7eb; min-height: 100vh; }
+    header { padding: 1.2rem 2rem; background: #020617; border-bottom: 1px solid #1f2937; display: flex; justify-content: space-between; align-items: center; }
+    nav { display: flex; gap: 0.5rem; margin: 1rem 2rem; flex-wrap: wrap; }
+    nav a { color: #9ca3af; text-decoration: none; }
+    main { padding: 2rem; max-width: 720px; }
+    .card { background: #020617; border-radius: 0.75rem; padding: 1.5rem 2rem; border: 1px solid #1f2937; margin-bottom: 1.5rem; }
+    h2 { margin: 0 0 0.75rem; font-size: 1.1rem; }
+    p, li { color: #9ca3af; font-size: 0.9rem; line-height: 1.5; }
+    ul { columns: 2; padding-left: 1.2rem; }
+    .logout-button { background: transparent; border: 1px solid #374151; color: #9ca3af; padding: 0.25rem 0.7rem; border-radius: 999px; cursor: pointer; font-size: 0.75rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1 style="margin:0;font-size:1.4rem;">Fin Savvy</h1>
+    <div style="display:flex;align-items:center;gap:0.75rem;font-size:0.85rem;">
+      <span>{{ username }}</span>
+      <form method="post" action="/logout" style="margin:0;"><button type="submit" class="logout-button">Log out</button></form>
+    </div>
+  </header>
+  <nav>
+    <a href="/">Dashboard</a>
+    <a href="/upload">Upload</a>
+    <a href="/receipts">Receipts</a>
+    <a href="/budgets">Budgets</a>
+    <a href="/tax">Tax</a>
+    <a href="/credit">Credit</a>
+    <a href="/settings" style="color:#e5e7eb;">Settings</a>
+  </nav>
+  <main>
+    <div class="card">
+      <h2>Categories</h2>
+      <p>From classifier keyword rules. Edit fin_savvy_app/classifier.py or see ML_CLASSIFIER.md for ML.</p>
+      <ul>{% for c in categories %}<li>{{ c }}</li>{% endfor %}</ul>
+    </div>
+    <div class="card">
+      <h2>Parties</h2>
+      <p>Merchant labels for dashboard party sections.</p>
+      <ul>{% for p in parties %}<li>{{ p }}</li>{% endfor %}</ul>
+    </div>
+    <div class="card">
+      <h2>Account</h2>
+      <p><a href="/account/password" style="color:#38bdf8;">Change password</a></p>
+    </div>
+  </main>
+</body>
+</html>

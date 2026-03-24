@@ -97,8 +97,10 @@
       <a href="/">Dashboard</a>
       <a href="/upload">Upload statement</a>
       <a href="/receipts">Receipts</a>
+      <a href="/budgets">Budgets</a>
       <a href="/tax" style="color: #e5e7eb;">Tax</a>
       <a href="/credit">Credit score</a>
+      <a href="/settings">Settings</a>
     </nav>
 
     <main>
@@ -119,6 +121,9 @@
           <div class="row"><span>Effective rate</span><span>{{ tax_result.effective_rate_pct }}%</span></div>
           <div class="row take-home"><span>Take-home (approx)</span><span>R {{ "{:,.2f}".format(tax_result.take_home) }}</span></div>
         </div>
+        <p style="margin-top: 1rem;">
+          <a href="/tax/report?income={{ tax_result.annual_income }}" style="color: #38bdf8;">Download text report</a>
+        </p>
         {% endif %}
       </div>
 

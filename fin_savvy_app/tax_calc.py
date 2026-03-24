@@ -40,3 +40,20 @@ def calculate_tax(annual_taxable_income: float) -> dict:
         "take_home": round(take_home, 2),
         "annual_income": round(income, 2),
     }
+
+
+def format_tax_report_text(result: dict) -> str:
+    """Plain-text summary for download (SARS-style estimate disclaimer)."""
+    lines = [
+        "Fin Savvy – South African income tax estimate (simplified)",
+        "This is not tax advice. Consult SARS or a tax practitioner.",
+        "",
+        f"Annual taxable income (ZAR): {result['annual_income']:,.2f}".replace(",", " "),
+        f"Tax before primary rebate:     {result['tax_before_rebate']:,.2f}".replace(",", " "),
+        f"Primary rebate applied:        {result['rebate_applied']:,.2f}".replace(",", " "),
+        f"Estimated tax after rebate:  {result['estimated_tax']:,.2f}".replace(",", " "),
+        f"Effective rate:              {result['effective_rate_pct']}%",
+        f"Estimated take-home:         {result['take_home']:,.2f}".replace(",", " "),
+        "",
+    ]
+    return "\n".join(lines)

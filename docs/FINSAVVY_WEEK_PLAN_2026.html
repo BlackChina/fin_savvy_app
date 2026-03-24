@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fin Savvy – 1-week functionality plan</title>
+  <style>
+    :root { --bg: #0f172a; --card: #1e293b; --text: #e2e8f0; --muted: #94a3b8; --accent: #38bdf8; --border: #334155; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; margin: 0; padding: 1.5rem 2rem 2rem; max-width: 52rem; margin-left: auto; margin-right: auto; }
+    h1 { font-size: 1.75rem; margin-bottom: 0.5rem; }
+    h2 { font-size: 1.2rem; color: var(--accent); margin-top: 2rem; margin-bottom: 0.75rem; border-bottom: 1px solid var(--border); padding-bottom: 0.35rem; }
+    p { margin: 0.5rem 0; }
+    strong { color: #f8fafc; }
+    ul { margin: 0.5rem 0; padding-left: 1.5rem; }
+    li { margin: 0.35rem 0; }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    .meta { color: var(--muted); font-size: 0.95rem; margin-bottom: 1.5rem; }
+    .goal { background: var(--card); padding: 0.6rem 1rem; border-radius: 0.5rem; margin: 0.75rem 0; border-left: 3px solid var(--accent); }
+    code, .commit { font-family: ui-monospace, monospace; font-size: 0.88em; background: var(--card); padding: 0.15rem 0.4rem; border-radius: 0.25rem; }
+    .commit-block { display: block; margin: 0.5rem 0; white-space: pre-wrap; word-break: break-all; }
+    .checklist { list-style: none; padding-left: 0; }
+    .checklist li::before { content: "☐ "; color: var(--muted); }
+    .stretch { color: var(--muted); font-size: 0.9rem; }
+    .note { font-style: italic; color: var(--muted); margin-top: 2rem; }
+  </style>
+</head>
+<body>
+  <h1>Fin Savvy – 1‑week functionality plan</h1>
+  <p class="meta"><strong>Period:</strong> Monday 09 March 2026 → Sunday 15 March 2026</p>
+  <p class="meta"><strong>Rule:</strong> One focused session per day; <strong>one commit per day</strong> to <code>main</code> (or a feature branch) at end of that day’s work.</p>
+
+  <hr />
+
+  <h2>Monday 09 March 2026 – Budgets (backend)</h2>
+  <p class="goal"><strong>Goal:</strong> Add monthly budgets per category so you can later show “spent vs budget”.</p>
+  <ul class="checklist">
+    <li>Add <code>Budget</code> model: <code>user_id</code>, <code>bank_account_id</code> (optional), <code>category_name</code> (e.g. "Groceries"), <code>year_month</code> (e.g. <code>2026-03</code>), <code>amount</code> (limit in ZAR).</li>
+    <li>DB migration or <code>init_db</code> update to create <code>budgets</code> table.</li>
+    <li>CRUD: create/read/update/delete budget for a given user + period + category.</li>
+    <li>Optional: API route <code>GET /api/budgets?period=2026-03</code> and <code>POST /api/budgets</code> (or form endpoints if you prefer HTML-only).</li>
+  </ul>
+  <p><strong>End of day commit:</strong></p>
+  <code class="commit commit-block">git add … && git commit -m "feat: add Budget model and CRUD for monthly category budgets (2026-03-09)"</code>
+
+  <hr />
+
+  <h2>Tuesday 10 March 2026 – Budgets (dashboard)</h2>
+  <p class="goal"><strong>Goal:</strong> Show budgets on the dashboard and compare to actual spending.</p>
+  <ul class="checklist">
+    <li>On dashboard, for selected period, load budgets for that month.</li>
+    <li>In “Spending by category”: show budget (if set) and variance (e.g. “R 3 200 / R 4 000” or “R 800 under”).</li>
+    <li>Simple “Set budget” form or link to a small budget page: choose category, enter amount, save (uses CRUD from Monday).</li>
+  </ul>
+  <p><strong>End of day commit:</strong></p>
+  <code class="commit commit-block">git add … && git commit -m "feat: dashboard budget vs actual and set budget UI (2026-03-10)"</code>
+
+  <hr />
+
+  <h2>Wednesday 11 March 2026 – Export transactions (CSV)</h2>
+  <p class="goal"><strong>Goal:</strong> Let users download transactions for the selected period as CSV.</p>
+  <ul class="checklist">
+    <li>New route, e.g. <code>GET /export/transactions.csv?account_id=…&period=2026-03</code> (or from dashboard with same filters).</li>
+    <li>Response: CSV with columns such as Date, Description, Amount, Category, Party (using existing classifier).</li>
+    <li>Use existing period/account logic; stream or generate CSV in memory for that period.</li>
+    <li>Dashboard: add “Download CSV” button that links to this URL with current account + period.</li>
+  </ul>
+  <p><strong>End of day commit:</strong></p>
+  <code class="commit commit-block">git add … && git commit -m "feat: CSV export of transactions for selected period (2026-03-11)"</code>
+
+  <hr />
+
+  <h2>Thursday 12 March 2026 – Month‑over‑month summary</h2>
+  <p class="goal"><strong>Goal:</strong> Quick comparison of income/expenses vs previous month.</p>
+  <ul class="checklist">
+    <li>On dashboard, compute totals for <strong>previous month</strong> (same account) in addition to current period.</li>
+    <li>Add a small “vs last month” section: e.g. “Income: R 45 000 (↑ 10% from Feb)” / “Expenses: R 38 000 (↓ 5%)”.</li>
+    <li>Optional: simple sparkline or +/- badge next to summary cards.</li>
+  </ul>
+  <p><strong>End of day commit:</strong></p>
+  <code class="commit commit-block">git add … && git commit -m "feat: month-over-month comparison on dashboard (2026-03-12)"</code>
+
+  <hr />
+
+  <h2>Friday 13 March 2026 – Receipts and transactions link</h2>
+  <p class="goal"><strong>Goal:</strong> Link uploaded receipts to transactions (e.g. match by date + amount or manual select).</p>
+  <ul class="checklist">
+    <li>If not already present: add <code>transaction_id</code> (nullable FK) to receipt model, or a link table.</li>
+    <li>UI on receipts page: for each receipt, optional “Link to transaction” (dropdown or search of transactions in that month).</li>
+    <li>Dashboard or receipt view: show “Receipt” badge/link on a transaction when linked.</li>
+    <li>Optional: suggest matches by date + amount and let user confirm.</li>
+  </ul>
+  <p><strong>End of day commit:</strong></p>
+  <code class="commit commit-block">git add … && git commit -m "feat: link receipts to transactions and show on dashboard (2026-03-13)"</code>
+
+  <hr />
+
+  <h2>Saturday 14 March 2026 – Settings / categories overview</h2>
+  <p class="goal"><strong>Goal:</strong> One place to see (and optionally tune) how categories and parties are used.</p>
+  <ul class="checklist">
+    <li>New “Settings” or “Categories” page (e.g. <code>/settings</code> or <code>/categories</code>), protected (login required).</li>
+    <li>List categories and parties used in the app (from classifier: keyword lists and/or from ML CSV).</li>
+    <li>Optional: simple “Custom category” or “Custom party” form that appends to keyword lists or adds rows to a user-specific table (if you introduce one).</li>
+    <li>Link to ML doc: “To improve auto-category, edit CSV and retrain” (link to <code>ML_CLASSIFIER.md</code> or <code>run_train_classifier.sh</code>).</li>
+  </ul>
+  <p><strong>End of day commit:</strong></p>
+  <code class="commit commit-block">git add … && git commit -m "feat: settings/categories page and docs link (2026-03-14)"</code>
+
+  <hr />
+
+  <h2>Sunday 15 March 2026 – Polish and docs</h2>
+  <p class="goal"><strong>Goal:</strong> Stabilise the week’s features and document them.</p>
+  <ul class="checklist">
+    <li>Fix any bugs from the week (dashboard, export, budgets, receipts link).</li>
+    <li>Update README: list new features (budgets, CSV export, month‑over‑month, receipt linking, settings).</li>
+    <li>Optional: add a short “Changelog” or “Recent” section in README or <code>docs/CHANGELOG.md</code> for 2026-03-09 → 2026-03-15.</li>
+    <li>Ensure Docker and <code>run_train_classifier.sh</code> still work; .gitignore and env docs up to date.</li>
+  </ul>
+  <p><strong>End of day commit:</strong></p>
+  <code class="commit commit-block">git add … && git commit -m "docs and polish: README, changelog, bug fixes (2026-03-15)"</code>
+
+  <hr />
+
+  <h2>Commit checklist (each day)</h2>
+  <ol>
+    <li>Work only on that day’s scope.</li>
+    <li>Test locally (and in Docker if you use it).</li>
+    <li>Stage only relevant files: <code>git add &lt;files&gt;</code></li>
+    <li>Single commit with a clear message including the date: <code>git commit -m "feat: … (2026-MM-DD)"</code></li>
+    <li>Push at end of day (or when ready): <code>git push origin main</code></li>
+  </ol>
+
+  <hr />
+
+  <h2>Optional stretch (if time)</h2>
+  <ul class="stretch">
+    <li><strong>Recurring transactions:</strong> Mark or detect recurring items (e.g. subscriptions) and show “Recurring” on dashboard.</li>
+    <li><strong>Multi-account view:</strong> Dashboard option to “All accounts” for the period (aggregate income/expenses).</li>
+    <li><strong>Password change:</strong> Logged-in user can change password from settings.</li>
+  </ul>
+
+  <p class="note">If your “next week Sunday” was 15 <strong>February</strong> 2026 instead, shift all dates back by one month (09 Feb – 15 Feb) and use the same daily themes.</p>
+</body>
+</html>

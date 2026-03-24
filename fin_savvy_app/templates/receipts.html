@@ -100,11 +100,25 @@
       <a href="/">Dashboard</a>
       <a href="/upload">Upload statement</a>
       <a href="/receipts" style="color: #e5e7eb;">Receipts</a>
+      <a href="/budgets">Budgets</a>
       <a href="/tax">Tax</a>
       <a href="/credit">Credit score</a>
+      <a href="/settings">Settings</a>
     </nav>
 
     <main>
+      {% if accounts %}
+      <div class="card" style="padding: 0.75rem 1.25rem;">
+        <form method="get" action="/receipts" style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+          <span style="font-size: 0.85rem; color: #9ca3af;">Link receipts to expenses from:</span>
+          <select name="account_id" onchange="this.form.submit()" style="max-width: 220px;">
+            {% for acc in accounts %}
+            <option value="{{ acc.id }}" {% if acc.id == account_id %}selected{% endif %}>{{ acc.name }}</option>
+            {% endfor %}
+          </select>
+        </form>
+      </div>
+      {% endif %}
       <div class="card">
         <h2>Add receipt or invoice</h2>
         <p class="hint">Track cash spending by adding receipts. Helps with tax and reduces unaccounted waste.</p>
@@ -125,6 +139,10 @@
             <label for="file">Scan / photo (optional)</label>
             <input type="file" name="file" id="file" accept=".pdf,.png,.jpg,.jpeg,.webp" />
           </div>
+          <div class="field" style="display: flex; align-items: center; gap: 0.5rem;">
+            <input type="checkbox" name="try_ocr" id="try_ocr" value="on" />
+            <label for="try_ocr" style="margin: 0; font-size: 0.9rem;">Try OCR on image (amount &amp; text; needs <code>tesseract-ocr</code> on server)</label>
+          </div>
           <button type="submit">Add receipt</button>
           {% if error %}<div class="error">{{ error }}</div>{% endif %}
         </form>
@@ -139,6 +157,7 @@
               <th>Date</th>
               <th>Description</th>
               <th style="text-align: right;">Amount</th>
+              <th>Linked expense</th>
               <th></th>
             </tr>
           </thead>
@@ -147,7 +166,25 @@
             <tr>
               <td>{{ r.date }}</td>
               <td>{{ r.description or "—" }}</td>
-              <td style="text-align: right;" class="amount">R {{ r.amount | round(2) }}</td>
+              <td style="text-align: right;" class="amount">R {{ r.amount | format_currency }}</td>
+              <td style="font-size: 0.78rem; max-width: 280px;">
+                {% if account_id and linkable_transactions %}
+                <form method="post" action="/receipts/{{ r.id }}/link" style="display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap;">
+                  <input type="hidden" name="account_id" value="{{ account_id }}" />
+                  <select name="transaction_id" style="flex: 1; min-width: 140px; font-size: 0.75rem; padding: 0.25rem;">
+                    <option value="">— None —</option>
+                    {% for t in linkable_transactions %}
+                    <option value="{{ t.id }}" {% if r.transaction_id == t.id %}selected{% endif %}>{{ t.date }} · R {{ (t.amount * -1) | format_currency }} · {{ (t.description_raw or "")[:32] }}</option>
+                    {% endfor %}
+                  </select>
+                  <button type="submit" style="font-size: 0.7rem; padding: 0.25rem 0.45rem; border-radius: 0.35rem; border: 1px solid #374151; background: #1e293b; color: #e5e7eb; cursor: pointer;">Save</button>
+                </form>
+                {% elif r.transaction_id and r.linked_transaction %}
+                {{ r.linked_transaction.date }} · {{ (r.linked_transaction.description_raw or "")[:40] }}
+                {% else %}
+                <span style="color: #6b7280;">—</span>
+                {% endif %}
+              </td>
               <td>
                 {% if r.file_path %}
                 <a href="/receipts/{{ r.id }}/file" target="_blank" rel="noopener" style="color: #38bdf8; font-size: 0.85rem;">View</a>

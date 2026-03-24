@@ -18,7 +18,24 @@ def init_db() -> None:
     from . import models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
+    _ensure_schema_patches()
     _seed_default_user()
+
+
+def _ensure_schema_patches() -> None:
+    """Add columns missing on existing DBs (PostgreSQL)."""
+    from sqlalchemy import inspect, text
+
+    try:
+        insp = inspect(engine)
+        if "receipts" not in insp.get_table_names():
+            return
+        cols = {c["name"] for c in insp.get_columns("receipts")}
+        if "transaction_id" not in cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE receipts ADD COLUMN transaction_id INTEGER"))
+    except Exception:
+        pass
 
 
 def _seed_default_user() -> None:

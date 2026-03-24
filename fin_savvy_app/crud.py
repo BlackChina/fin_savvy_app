@@ -197,6 +197,27 @@ def get_cash_withdrawal_total_for_user(
     return float(total or 0.0)
 
 
+def get_cash_withdrawal_total_for_account(
+    db: Session,
+    account_id: int,
+    period_start: date,
+    period_end: date,
+) -> float:
+    """Cash withdrawals for one bank account in a date range."""
+    total = (
+        db.query(func.coalesce(func.sum(func.abs(models.Transaction.amount)), 0.0))
+        .join(models.Statement)
+        .filter(
+            models.Statement.bank_account_id == account_id,
+            models.Transaction.is_cash_withdrawal.is_(True),
+            models.Transaction.date >= period_start,
+            models.Transaction.date <= period_end,
+        )
+        .scalar()
+    )
+    return float(total or 0.0)
+
+
 def get_receipt_total_for_user(
     db: Session,
     user_id: int,
@@ -333,4 +354,128 @@ def get_available_months(db: Session, account_id: int) -> list[tuple[int, int]]:
         .all()
     )
     return [(int(r.y), int(r.m)) for r in rows]
+
+
+def list_budgets_for_user(
+    db: Session,
+    user_id: int,
+    year_month: str,
+    bank_account_id: int | None = None,
+) -> list[models.MonthlyBudget]:
+    q = db.query(models.MonthlyBudget).filter(
+        models.MonthlyBudget.user_id == user_id,
+        models.MonthlyBudget.year_month == year_month,
+    )
+    if bank_account_id is not None:
+        q = q.filter(
+            (models.MonthlyBudget.bank_account_id == bank_account_id)
+            | (models.MonthlyBudget.bank_account_id.is_(None))
+        )
+    return q.order_by(models.MonthlyBudget.category_name).all()
+
+
+def upsert_monthly_budget(
+    db: Session,
+    *,
+    user_id: int,
+    category_name: str,
+    year_month: str,
+    amount_limit: float,
+    bank_account_id: int | None = None,
+) -> models.MonthlyBudget:
+    q = db.query(models.MonthlyBudget).filter(
+        models.MonthlyBudget.user_id == user_id,
+        models.MonthlyBudget.category_name == category_name,
+        models.MonthlyBudget.year_month == year_month,
+    )
+    if bank_account_id is None:
+        q = q.filter(models.MonthlyBudget.bank_account_id.is_(None))
+    else:
+        q = q.filter(models.MonthlyBudget.bank_account_id == bank_account_id)
+    row = q.first()
+    if row:
+        row.amount_limit = float(amount_limit)
+    else:
+        row = models.MonthlyBudget(
+            user_id=user_id,
+            bank_account_id=bank_account_id,
+            category_name=category_name,
+            year_month=year_month,
+            amount_limit=float(amount_limit),
+        )
+        db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def delete_monthly_budget(db: Session, budget_id: int, user_id: int) -> bool:
+    row = (
+        db.query(models.MonthlyBudget)
+        .filter(models.MonthlyBudget.id == budget_id, models.MonthlyBudget.user_id == user_id)
+        .first()
+    )
+    if not row:
+        return False
+    db.delete(row)
+    db.commit()
+    return True
+
+
+def list_transactions_for_linking(
+    db: Session,
+    user_id: int,
+    account_id: int,
+    period_start: date,
+    period_end: date,
+) -> list[models.Transaction]:
+    """Expense transactions in period for receipt linking dropdown."""
+    return (
+        db.query(models.Transaction)
+        .join(models.Statement)
+        .join(models.BankAccount)
+        .filter(
+            models.BankAccount.user_id == user_id,
+            models.Statement.bank_account_id == account_id,
+            models.Transaction.date >= period_start,
+            models.Transaction.date <= period_end,
+            models.Transaction.direction == "EXPENSE",
+        )
+        .order_by(models.Transaction.date.desc(), models.Transaction.id.desc())
+        .limit(500)
+        .all()
+    )
+
+
+def set_receipt_transaction_link(
+    db: Session,
+    receipt_id: int,
+    user_id: int,
+    transaction_id: int | None,
+) -> bool:
+    r = (
+        db.query(models.Receipt)
+        .filter(models.Receipt.id == receipt_id, models.Receipt.user_id == user_id)
+        .first()
+    )
+    if not r:
+        return False
+    if transaction_id is None:
+        r.transaction_id = None
+    else:
+        t = (
+            db.query(models.Transaction)
+            .join(models.Statement)
+            .join(models.BankAccount)
+            .filter(
+                models.Transaction.id == transaction_id,
+                models.BankAccount.user_id == user_id,
+            )
+            .first()
+        )
+        if not t:
+            return False
+        r.transaction_id = transaction_id
+    db.commit()
+    return True
 

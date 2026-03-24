@@ -209,6 +209,15 @@
         color: #e5e7eb;
         font-size: 0.85rem;
       }
+      .alert {
+        padding: 0.75rem 1rem;
+        border-radius: 0.5rem;
+        font-size: 0.88rem;
+        margin-bottom: 0.5rem;
+        border: 1px solid #334155;
+      }
+      .alert-warning { background: rgba(249, 115, 22, 0.12); border-color: #ea580c; color: #fed7aa; }
+      .alert-info { background: rgba(56, 189, 248, 0.1); border-color: #0284c7; color: #bae6fd; }
       .generosity { color: #a78bfa; }
       .category-bars { margin-top: 0.75rem; }
       .category-row { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem; font-size: 0.85rem; }
@@ -218,7 +227,9 @@
       .category-row .bar.generosity { background: #a78bfa; }
       .category-row .bar.discretionary { background: #f97316; }
       .category-row .bar.other { background: #64748b; }
-      .category-row .value { min-width: 6.5rem; width: 6.5rem; text-align: right; white-space: nowrap; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+      .category-row .value { min-width: 6.5rem; max-width: 14rem; text-align: right; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+      .category-row .value-main { white-space: nowrap; }
+      .category-row .budget-cap { font-size: 0.72rem; color: #9ca3af; font-weight: 400; }
       .ledger-grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -281,8 +292,10 @@
         <a href="/" class="active">Dashboard</a>
         <a href="/upload">Upload statement</a>
         <a href="/receipts">Receipts</a>
+        <a href="/budgets">Budgets</a>
         <a href="/tax">Tax</a>
         <a href="/credit">Credit score</a>
+        <a href="/settings">Settings</a>
       </nav>
 
       {% if no_accounts %}
@@ -317,7 +330,39 @@
           </select>
         </div>
         {% endif %}
+        <div style="min-width: 160px;">
+          <label for="q">Search description</label>
+          <input type="search" name="q" id="q" value="{{ search_q }}" placeholder="Filter…" style="padding: 0.35rem 0.6rem; border-radius: 0.4rem; border: 1px solid #374151; background: #020617; color: #e5e7eb; font-size: 0.85rem; width: 100%; box-sizing: border-box;" />
+        </div>
+        <div style="align-self: flex-end;">
+          <button type="submit" style="padding: 0.4rem 0.8rem; border-radius: 0.4rem; border: 1px solid #374151; background: #1e293b; color: #e5e7eb; cursor: pointer; font-size: 0.85rem;">Apply</button>
+        </div>
+        {% if year and month %}
+        <div style="align-self: flex-end;">
+          <a href="/export/transactions.csv?account_id={{ account_id }}&amp;period={{ year }}-{{ '%02d'|format(month) }}" style="color: #38bdf8; font-size: 0.85rem; white-space: nowrap;">Download CSV</a>
+        </div>
+        {% endif %}
       </form>
+
+      {% if dashboard_alerts %}
+      <div class="alerts-stack" style="margin-bottom: 1.25rem;">
+        {% for a in dashboard_alerts %}
+        <div class="alert alert-{{ a.level }}" role="status">
+          <strong>{{ a.title }}</strong> — {{ a.message }}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if not no_accounts and year and month %}
+      <section class="card" style="margin-bottom: 1rem;">
+        <h2 style="margin: 0 0 0.35rem; font-size: 1rem; color: #9ca3af;">Compared to {{ prev_month_label | default('', true) }}</h2>
+        <p style="margin: 0; font-size: 0.9rem;">
+          Income <span class="income">R {{ prev_month_income | default(0, true) | format_currency }}</span>
+          &nbsp;·&nbsp; Expenses <span class="expense">R {{ (prev_month_expense | default(0, true) * -1) | format_currency }}</span>
+        </p>
+      </section>
+      {% endif %}
 
       {% if not no_accounts %}
       <section class="summary-grid">
@@ -378,7 +423,10 @@
             <div class="bar-wrap">
               <div class="bar {% if cat_name == 'Generosity' %}generosity{% elif cat_name == 'Discretionary' %}discretionary{% else %}other{% endif %}" style="width: {{ (100 * cat_total / max_cat) if max_cat > 0 else 0 }}%;"></div>
             </div>
-            <span class="value">R {{ cat_total | format_currency }}</span>
+            <div class="value">
+              <div class="value-main">R {{ cat_total | format_currency }}</div>
+              {% if budget_by_category.get(cat_name) %}<div class="budget-cap">of R {{ budget_by_category[cat_name] | format_currency }} budget</div>{% endif %}
+            </div>
           </div>
           {% endif %}
           {% endfor %}
@@ -405,6 +453,7 @@
           <form method="get" action="/" class="filters" style="margin-bottom: 0.75rem;">
             <input type="hidden" name="account_id" value="{{ account_id }}">
             {% if year and month %}<input type="hidden" name="period" value="{{ year }}-{{ '%02d'|format(month) }}">{% endif %}
+            {% if search_q %}<input type="hidden" name="q" value="{{ search_q }}">{% endif %}
             <input type="hidden" name="income_sort" value="{{ income_sort }}">
             <label for="expense_sort">Sort:</label>
             <select name="expense_sort" id="expense_sort" onchange="this.form.submit()">
@@ -444,6 +493,7 @@
           <form method="get" action="/" class="filters" style="margin-bottom: 0.75rem;">
             <input type="hidden" name="account_id" value="{{ account_id }}">
             {% if year and month %}<input type="hidden" name="period" value="{{ year }}-{{ '%02d'|format(month) }}">{% endif %}
+            {% if search_q %}<input type="hidden" name="q" value="{{ search_q }}">{% endif %}
             <input type="hidden" name="expense_sort" value="{{ expense_sort }}">
             <label for="income_sort">Sort:</label>
             <select name="income_sort" id="income_sort" onchange="this.form.submit()">
