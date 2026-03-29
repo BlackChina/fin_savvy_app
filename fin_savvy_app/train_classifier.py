@@ -79,7 +79,7 @@ def train(csv_path: Path) -> None:
     )
     X = vectorizer.fit_transform(descriptions)
 
-    # Category classifier
+    # Category classifier — class_weight balances skewed CSVs (e.g. too many Dining rows).
     pipe_cat = Pipeline([
         ("vec", TfidfVectorizer(
             max_features=8000,
@@ -88,7 +88,7 @@ def train(csv_path: Path) -> None:
             strip_accents="unicode",
             lowercase=True,
         )),
-        ("clf", LogisticRegression(max_iter=500, C=0.5)),
+        ("clf", LogisticRegression(max_iter=500, C=0.5, class_weight="balanced")),
     ])
     pipe_cat.fit(descriptions, categories)
 
@@ -101,7 +101,7 @@ def train(csv_path: Path) -> None:
             strip_accents="unicode",
             lowercase=True,
         )),
-        ("clf", LogisticRegression(max_iter=500, C=0.5)),
+        ("clf", LogisticRegression(max_iter=500, C=0.5, class_weight="balanced")),
     ])
     pipe_party.fit(descriptions, parties)
 

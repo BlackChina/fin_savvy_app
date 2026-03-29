@@ -30,6 +30,16 @@ services:
       - "8001:8000"
     volumes:
       - ./fin_savvy_app:/app/fin_savvy_app
+    command: uvicorn fin_savvy_app.main:app --host 0.0.0.0 --port 8000
+
+  ejournal:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8002:8000"
+    volumes:
+      - ./ejournal_app:/app/ejournal_app
+    command: uvicorn ejournal_app.main:app --host 0.0.0.0 --port 8000
 
 volumes:
   db_data:

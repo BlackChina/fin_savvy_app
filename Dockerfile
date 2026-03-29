@@ -17,6 +17,7 @@ RUN pip install --upgrade pip && \
     pip install --no-cache-dir --retries 8 --timeout 300 -r /app/requirements.txt
 
 COPY fin_savvy_app /app/fin_savvy_app
+COPY ejournal_app /app/ejournal_app
 
 EXPOSE 8000
 

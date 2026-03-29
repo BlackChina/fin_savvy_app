@@ -98,17 +98,49 @@ def classify_with_ml(
     return result
 
 
+def _pipeline_category_classes(cat_pipe: object):
+    if hasattr(cat_pipe, "classes_"):
+        return getattr(cat_pipe, "classes_", None)
+    named = getattr(cat_pipe, "named_steps", None)
+    if named:
+        clf = named.get("clf")
+        if clf is not None and hasattr(clf, "classes_"):
+            return clf.classes_
+    return None
+
+
 def _classify_local(description: str, category_choices: list[str]) -> tuple[str | None, str | None]:
     """Predict category and party using trained sklearn models."""
     cat_pipe, party_pipe = _get_local_models()
     if cat_pipe is None or party_pipe is None:
         return (None, None)
     try:
-        cat = cat_pipe.predict([description])[0]
-        party = party_pipe.predict([description])[0]
-        if cat not in category_choices and "Other" in category_choices:
+        min_p_raw = os.environ.get("FINSAVVY_ML_MIN_PROBABILITY", "0.35").strip()
+        min_p = float(min_p_raw) if min_p_raw else 0.35
+
+        cat: str | None
+        if min_p <= 0:
+            cat = str(cat_pipe.predict([description])[0])
+        elif hasattr(cat_pipe, "predict_proba"):
+            classes = _pipeline_category_classes(cat_pipe)
+            probs = cat_pipe.predict_proba([description])[0]
+            if classes is not None and len(probs) == len(classes):
+                best_i = int(probs.argmax())
+                best_prob = float(probs[best_i])
+                cat = str(classes[best_i]) if best_prob >= min_p else None
+            else:
+                cat = str(cat_pipe.predict([description])[0])
+        else:
+            cat = str(cat_pipe.predict([description])[0])
+
+        if cat is not None and cat not in category_choices and "Other" in category_choices:
             cat = "Other"
-        return (str(cat), str(party))
+
+        # If category is uncertain, do not trust the party head either (same collapse issue).
+        party: str | None = None
+        if cat is not None:
+            party = str(party_pipe.predict([description])[0])
+        return (cat, party)
     except Exception:
         return (None, None)
 

@@ -73,7 +73,20 @@ Set:
 FINSAVVY_CLASSIFIER=local
 ```
 
-No `OPENAI_API_KEY` needed. Restart the app. The app will load the joblib models and use them for category and party; if a prediction fails, it falls back to the keyword rules.
+No `OPENAI_API_KEY` needed. Restart the app. The app will load the joblib models and use them for category and party; if a prediction fails or is below the confidence threshold, the category shows as **Other** (keywords already ran first).
+
+#### Why “Dining” (or one category) can look huge
+
+Totals in the dashboard are **sums of whatever category each transaction was assigned**. They are **not** checked against salary or income.
+
+If your training CSV has **many more rows for one category** (e.g. Dining) than others, a plain logistic model often **predicts that class for almost every unknown description**. That inflates that category to nearly **all spending**, which is what you are seeing—not a bug in addition.
+
+Mitigations built into the app:
+
+- **`FINSAVVY_ML_MIN_PROBABILITY`** (default `0.35`): the local model must assign at least this probability to its top class; otherwise the transaction is treated as uncategorized and shows as **Other** (keyword rules already ran and did not match). Raise it (e.g. `0.45`) to be stricter; set to `0` to disable the threshold (old behaviour).
+- **Retrain** with `class_weight="balanced"` in `train_classifier.py` so rare categories are not ignored.
+
+For a clean slate without ML while you relabel data: `FINSAVVY_CLASSIFIER=keyword`.
 
 ### 4. Retrain when you add data
 
