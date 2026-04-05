@@ -32,6 +32,9 @@ fin_savvy_app/data/*.joblib
 .DS_Store
 Thumbs.db
 
+# Standalone eJournal app (separate Git repository)
+ejournal_app/
+
 # Stray / artifact files (e.g. from Docker or shell)
 /=
 /\[internal\]
