@@ -258,7 +258,7 @@
     <header>
       <div>
         <h1>Fin Savvy</h1>
-        <span class="header-meta-line">Account #{{ account_id }} &bull; {{ period_label }}</span>
+        <span class="header-meta-line">Account #{{ account_id }} &bull; {{ period_label }}{% if totals_range_label %} &bull; {{ totals_range_label }}{% endif %}</span>
       </div>
       <div class="user-area">
         <span class="pill">
@@ -295,6 +295,14 @@
         <input type="hidden" name="expense_sort" value="{{ expense_sort }}">
         <input type="hidden" name="income_sort" value="{{ income_sort }}">
         <div>
+          <label for="summary_scope">Totals cover</label>
+          <select name="summary_scope" id="summary_scope" onchange="this.form.submit()" autocomplete="off" title="Which transactions feed the summary cards, charts, and tables">
+            <option value="month" {% if summary_scope == 'month' %}selected{% endif %}>This month only</option>
+            <option value="ytd" {% if summary_scope == 'ytd' %}selected{% endif %}>Year to date (Jan → selected month)</option>
+            <option value="cumulative" {% if summary_scope == 'cumulative' %}selected{% endif %}>All history through selected month</option>
+          </select>
+        </div>
+        <div>
           <label for="account_id">Account</label>
           <select name="account_id" id="account_id" onchange="this.form.submit()">
             {% for acc in accounts %}
@@ -325,7 +333,7 @@
         </div>
         {% if year and month %}
         <div style="align-self: flex-end;">
-          <a href="/export/transactions.csv?account_id={{ account_id }}&amp;period={{ year }}-{{ '%02d'|format(month) }}" style="color: #38bdf8; font-size: 0.85rem; white-space: nowrap;">Download CSV</a>
+          <a href="/export/transactions.csv?account_id={{ account_id }}&amp;period={{ year }}-{{ '%02d'|format(month) }}&amp;summary_scope={{ summary_scope }}" style="color: #38bdf8; font-size: 0.85rem; white-space: nowrap;">Download CSV</a>
         </div>
         {% endif %}
       </form>
@@ -340,7 +348,7 @@
       </div>
       {% endif %}
 
-      {% if not no_accounts and year and month %}
+      {% if not no_accounts and year and month and summary_scope == 'month' %}
       <section class="card" style="margin-bottom: 1rem;">
         <h2 style="margin: 0 0 0.35rem; font-size: 1rem; color: #9ca3af;">Compared to {{ prev_month_label | default('', true) }}</h2>
         <p style="margin: 0; font-size: 0.9rem;">
@@ -351,6 +359,9 @@
       {% endif %}
 
       {% if not no_accounts %}
+      {% if totals_range_label %}
+      <p style="margin: 0 0 1rem; font-size: 0.85rem; color: #94a3b8;">Figures below use: <strong style="color: #e5e7eb;">{{ totals_range_label }}</strong></p>
+      {% endif %}
       <section class="summary-grid">
         <div class="card">
           <h2>Total income</h2>
@@ -514,7 +525,7 @@
 
       <section class="card" style="margin-bottom: 1.5rem;">
         <h2 style="margin: 0 0 1rem;">Debit & Credit ledger</h2>
-        <p style="margin: 0 0 1rem; color: #9ca3af; font-size: 0.9rem;">Income vs expenses for {{ period_label }}.</p>
+        <p style="margin: 0 0 1rem; color: #9ca3af; font-size: 0.9rem;">Income vs expenses — {{ totals_range_label or period_label }}.</p>
         <div class="ledger-grid">
           <div class="ledger-column ledger-credit">
             <h3 style="margin: 0 0 0.5rem; font-size: 0.95rem; color: #22c55e;">Credit (Income)</h3>
@@ -526,7 +537,7 @@
           </div>
         </div>
         <div class="ledger-balance">
-          <span class="ledger-label">Balance (end of month):</span>
+          <span class="ledger-label">Net cash flow (not bank balance):</span>
           <span class="ledger-value {% if net >= 0 %}net-positive{% else %}net-negative{% endif %}">R {{ net | format_currency }}</span>
         </div>
         {% if net < 0 %}
@@ -543,14 +554,14 @@
       <section class="layout-grid" style="margin-bottom: 1.5rem;">
         <div class="card">
           <h2 style="margin: 0 0 1rem;">Income activity</h2>
-          <p style="margin: 0 0 1rem; color: #9ca3af; font-size: 0.85rem;">Daily income for {{ period_label }}.</p>
+          <p style="margin: 0 0 1rem; color: #9ca3af; font-size: 0.85rem;">Daily income — {{ totals_range_label or period_label }}.</p>
           <div class="chart-container">
             <canvas id="incomeChart" height="200"></canvas>
           </div>
         </div>
         <div class="card">
           <h2 style="margin: 0 0 1rem;">Expense activity</h2>
-          <p style="margin: 0 0 1rem; color: #9ca3af; font-size: 0.85rem;">Daily expenses for {{ period_label }}.</p>
+          <p style="margin: 0 0 1rem; color: #9ca3af; font-size: 0.85rem;">Daily expenses — {{ totals_range_label or period_label }}.</p>
           <div class="chart-container">
             <canvas id="expenseChart" height="200"></canvas>
           </div>
@@ -561,7 +572,7 @@
         <div class="card">
           <div class="section-title">
             <h2>Parties you pay</h2>
-            <span>{{ period_label }} — click to drill down</span>
+            <span>{{ totals_range_label or period_label }} — click to drill down</span>
           </div>
           <table>
             <thead>
@@ -618,7 +629,7 @@
         <div class="card">
           <div class="section-title">
             <h2>Parties you receive from</h2>
-            <span>{{ period_label }} — click to drill down</span>
+            <span>{{ totals_range_label or period_label }} — click to drill down</span>
           </div>
           <table>
             <thead>

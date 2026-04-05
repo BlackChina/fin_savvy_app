@@ -297,9 +297,21 @@ def dashboard(
     expense_sort = request.query_params.get("expense_sort") or "date"
     income_sort = request.query_params.get("income_sort") or "date"
     search_q = request.query_params.get("q")
+    summary_scope = (request.query_params.get("summary_scope") or "month").strip().lower()
+    if summary_scope not in ("month", "ytd", "cumulative"):
+        summary_scope = "month"
     try:
         return _render_dashboard(
-            request, user, user_id, account_id, period, db, expense_sort, income_sort, search_q=search_q
+            request,
+            user,
+            user_id,
+            account_id,
+            period,
+            db,
+            expense_sort,
+            income_sort,
+            search_q=search_q,
+            summary_scope=summary_scope,
         )
     except Exception as e:
         tb = traceback.format_exc()
@@ -307,6 +319,34 @@ def dashboard(
             content=f"<pre style='background:#1e293b;color:#e2e8f0;padding:1rem;overflow:auto;'>{tb}</pre>",
             status_code=500,
         )
+
+
+def _dashboard_totals_date_range(
+    db: Session,
+    account_id: int,
+    year: int,
+    month: int,
+    summary_scope: str,
+) -> tuple[date, date, str]:
+    """Date range for dashboard totals, charts, and tables. End is always last day of selected month."""
+    period_start = date(year, month, 1)
+    _, last_day = monthrange(year, month)
+    period_end = date(year, month, last_day)
+    range_start, range_end = period_start, period_end
+    label = f"{month_name[month]} {year} only"
+    if summary_scope == "ytd":
+        range_start = date(year, 1, 1)
+        label = f"Year to date through {month_name[month]} {year}"
+    elif summary_scope == "cumulative":
+        earliest = (
+            db.query(func.min(models.Transaction.date))
+            .join(models.Statement)
+            .filter(models.Statement.bank_account_id == account_id)
+            .scalar()
+        )
+        range_start = earliest if earliest is not None else period_start
+        label = f"All history through {month_name[month]} {year}"
+    return range_start, range_end, label
 
 
 def _render_dashboard(
@@ -319,6 +359,7 @@ def _render_dashboard(
     expense_sort: str = "date",
     income_sort: str = "date",
     search_q: str | None = None,
+    summary_scope: str = "month",
 ):
     accounts = crud.list_bank_accounts(db, user_id)
     if not accounts:
@@ -367,6 +408,8 @@ def _render_dashboard(
                 "prev_month_expense": None,
                 "prev_month_label": "",
                 "budget_by_category": {},
+                "summary_scope": summary_scope,
+                "totals_range_label": "",
             },
         )
     if not crud.get_bank_account_for_user(db, account_id, user_id):
@@ -434,6 +477,8 @@ def _render_dashboard(
                 "prev_month_expense": None,
                 "prev_month_label": "",
                 "budget_by_category": {},
+                "summary_scope": summary_scope,
+                "totals_range_label": "",
             },
         )
 
@@ -445,6 +490,10 @@ def _render_dashboard(
     period_start = date(year, month, 1)
     _, last_day = monthrange(year, month)
     period_end = date(year, month, last_day)
+
+    range_start, range_end, totals_range_label = _dashboard_totals_date_range(
+        db, account_id, year, month, summary_scope
+    )
 
     if month == 1:
         py, pm = year - 1, 12
@@ -482,8 +531,8 @@ def _render_dashboard(
         .join(models.Statement)
         .filter(
             models.Statement.bank_account_id == account_id,
-            models.Transaction.date >= period_start,
-            models.Transaction.date <= period_end,
+            models.Transaction.date >= range_start,
+            models.Transaction.date <= range_end,
             models.Transaction.direction == "INCOME",
         )
     )
@@ -494,8 +543,8 @@ def _render_dashboard(
         .join(models.Statement)
         .filter(
             models.Statement.bank_account_id == account_id,
-            models.Transaction.date >= period_start,
-            models.Transaction.date <= period_end,
+            models.Transaction.date >= range_start,
+            models.Transaction.date <= range_end,
             models.Transaction.direction == "EXPENSE",
         )
     )
@@ -508,8 +557,8 @@ def _render_dashboard(
         .join(models.Statement)
         .filter(
             models.Statement.bank_account_id == account_id,
-            models.Transaction.date >= period_start,
-            models.Transaction.date <= period_end,
+            models.Transaction.date >= range_start,
+            models.Transaction.date <= range_end,
         )
         .scalar()
         or 0
@@ -520,8 +569,8 @@ def _render_dashboard(
         .join(models.Statement)
         .filter(
             models.Statement.bank_account_id == account_id,
-            models.Transaction.date >= period_start,
-            models.Transaction.date <= period_end,
+            models.Transaction.date >= range_start,
+            models.Transaction.date <= range_end,
             models.Transaction.direction == "EXPENSE",
         )
         .all()
@@ -534,8 +583,8 @@ def _render_dashboard(
         .join(models.Statement)
         .filter(
             models.Statement.bank_account_id == account_id,
-            models.Transaction.date >= period_start,
-            models.Transaction.date <= period_end,
+            models.Transaction.date >= range_start,
+            models.Transaction.date <= range_end,
             models.Transaction.direction == "EXPENSE",
         )
     )
@@ -558,8 +607,8 @@ def _render_dashboard(
         .join(models.Statement)
         .filter(
             models.Statement.bank_account_id == account_id,
-            models.Transaction.date >= period_start,
-            models.Transaction.date <= period_end,
+            models.Transaction.date >= range_start,
+            models.Transaction.date <= range_end,
             models.Transaction.direction == "INCOME",
         )
     )
@@ -611,8 +660,8 @@ def _render_dashboard(
     # Daily aggregates for timeseries charts
     income_by_day: dict[str, float] = defaultdict(float)
     expense_by_day: dict[str, float] = defaultdict(float)
-    d = period_start
-    while d <= period_end:
+    d = range_start
+    while d <= range_end:
         key = d.isoformat()
         income_by_day[key]
         expense_by_day[key]
@@ -670,9 +719,9 @@ def _render_dashboard(
 
     try:
         cash_withdrawal_total = crud.get_cash_withdrawal_total_for_user(
-            db, user_id, period_start, period_end
+            db, user_id, range_start, range_end
         )
-        receipt_total = crud.get_receipt_total_for_user(db, user_id, period_start, period_end)
+        receipt_total = crud.get_receipt_total_for_user(db, user_id, range_start, range_end)
     except Exception:
         cash_withdrawal_total = 0.0
         receipt_total = 0.0
@@ -689,8 +738,8 @@ def _render_dashboard(
             db,
             user_id=user_id,
             account_id=account_id,
-            period_start=period_start,
-            period_end=period_end,
+            period_start=range_start,
+            period_end=range_end,
         )
     except Exception:
         dashboard_alerts = []
@@ -740,6 +789,8 @@ def _render_dashboard(
             "prev_month_expense": prev_month_expense,
             "prev_month_label": prev_month_label,
             "budget_by_category": budget_by_category,
+            "summary_scope": summary_scope,
+            "totals_range_label": totals_range_label,
         },
     )
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
@@ -1180,6 +1231,7 @@ def export_transactions_csv(
     request: Request,
     account_id: int,
     period: str,
+    summary_scope: str = "month",
     db: Session = Depends(get_db),
     user_id: int | None = Depends(get_current_user_id),
 ) -> Response:
@@ -1192,16 +1244,17 @@ def export_transactions_csv(
         year, month = int(y), int(m)
     except (ValueError, AttributeError):
         raise HTTPException(status_code=400, detail="period=YYYY-MM required")
-    period_start = date(year, month, 1)
-    _, last_day = monthrange(year, month)
-    period_end = date(year, month, last_day)
+    scope = (summary_scope or "month").strip().lower()
+    if scope not in ("month", "ytd", "cumulative"):
+        scope = "month"
+    range_start, range_end, _ = _dashboard_totals_date_range(db, account_id, year, month, scope)
     txs = (
         db.query(models.Transaction)
         .join(models.Statement)
         .filter(
             models.Statement.bank_account_id == account_id,
-            models.Transaction.date >= period_start,
-            models.Transaction.date <= period_end,
+            models.Transaction.date >= range_start,
+            models.Transaction.date <= range_end,
         )
         .order_by(models.Transaction.date, models.Transaction.id)
         .all()
@@ -1226,7 +1279,7 @@ def export_transactions_csv(
         content=body,
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": f'attachment; filename="transactions-{period}.csv"',
+            "Content-Disposition": f'attachment; filename="transactions-{period}-{scope}.csv"',
         },
     )
 
