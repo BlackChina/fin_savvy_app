@@ -26,6 +26,8 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg2://fin_savvy_user:fin_savvy_password@db:5432/fin_savvy
       FINSAVVY_CLASSIFIER: local
+      # Multiclass LR probabilities are often <0.35; 0 = always use top predicted category (see ml_classifier.py)
+      FINSAVVY_ML_MIN_PROBABILITY: "0"
     ports:
       - "8001:8000"
     volumes:
