@@ -1,0 +1,21 @@
+/* FinSavvy shared chrome: translucent header */
+header {
+  padding: 0.85rem 2rem;
+  background: rgba(2, 6, 23, 0.38);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border-bottom: 1px solid rgba(55, 65, 81, 0.55);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.header-meta-line {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  line-height: 1.35;
+  max-width: 100%;
+  display: block;
+  margin-top: 0.25rem;
+}

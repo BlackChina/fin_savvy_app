@@ -3,10 +3,7 @@
 <head><meta charset="UTF-8"/><title>Fin Savvy – Budgets</title>
 <style>
 html{height:100%}
-body{font-family:system-ui,sans-serif;margin:0;min-height:100%;min-height:100dvh;color:#e5e7eb;background-color:#0f172a;position:relative}
-body::before{content:"";position:fixed;inset:0;z-index:-2;background:url("/static/FinSavvy%20financial%20design%20background.png") center top / cover no-repeat;filter:blur(42px) brightness(.78) saturate(1.2);transform:scale(1.12);opacity:.5;pointer-events:none}
-body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background-image:linear-gradient(rgba(15,23,42,.5),rgba(15,23,42,.82)),url("/static/FinSavvy%20financial%20design%20background.png");background-position:center,center top;background-repeat:no-repeat,no-repeat;background-size:100% 100%,cover;background-attachment:fixed,fixed}
-header{padding:1.2rem 2rem;background:#020617;border-bottom:1px solid #1f2937;display:flex;justify-content:space-between;align-items:center}
+body{font-family:system-ui,sans-serif;margin:0;min-height:100%;min-height:100dvh;position:relative}
 nav{display:flex;gap:.5rem;margin:1rem 2rem;flex-wrap:wrap}
 nav a{color:#9ca3af;text-decoration:none;font-size:.9rem}
 main{padding:2rem;max-width:640px}
@@ -20,14 +17,16 @@ th,td{padding:.5rem;text-align:left;border-bottom:1px solid #1f2937}
 .logout-button{background:transparent;border:1px solid #374151;color:#9ca3af;padding:.25rem .7rem;border-radius:999px;cursor:pointer;font-size:.75rem}
 .hint{color:#9ca3af;font-size:.88rem;margin-bottom:1rem}
 </style>
+<link rel="stylesheet" href="/static/app-chrome.css" />
+<link rel="stylesheet" href="/static/finsavvy_background.css" />
 </head>
-<body>
+<body class="finsavvy-app-fill">
 <header><h1 style="margin:0;font-size:1.4rem">Fin Savvy</h1>
 <div style="display:flex;gap:.75rem;align-items:center;font-size:.85rem"><span>{{ username }}</span>
 <form method="post" action="/logout" style="margin:0"><button type="submit" class="logout-button">Log out</button></form></div></header>
 <nav>
 <a href="/">Dashboard</a><a href="/upload">Upload</a><a href="/receipts">Receipts</a>
-<a href="/budgets" style="color:#e5e7eb">Budgets</a><a href="/tax">Tax</a><a href="/credit">Credit</a><a href="/settings">Settings</a>
+<a href="/budgets" class="active">Budgets</a><a href="/tax">Tax</a><a href="/credit">Credit</a><a href="/settings">Settings</a>
 </nav>
 <main>
 {% if not accounts %}

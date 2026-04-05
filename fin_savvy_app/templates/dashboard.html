@@ -13,55 +13,11 @@
         padding: 0;
         min-height: 100%;
         min-height: 100dvh;
-        color: #e5e7eb;
-        background-color: #0f172a;
         position: relative;
-      }
-      /* Blurred wash fills viewport so side bands are tinted art, not flat black */
-      body::before {
-        content: "";
-        position: fixed;
-        inset: 0;
-        z-index: -2;
-        background: url("/static/FinSavvy%20financial%20design%20background.png") center top /
-          cover no-repeat;
-        filter: blur(42px) brightness(0.78) saturate(1.2);
-        transform: scale(1.12);
-        opacity: 0.5;
-        pointer-events: none;
-      }
-      /* Sharp art: top-aligned so logo + slogan stay in frame */
-      body::after {
-        content: "";
-        position: fixed;
-        inset: 0;
-        z-index: -1;
-        pointer-events: none;
-        background-image: linear-gradient(
-            rgba(15, 23, 42, 0.5),
-            rgba(15, 23, 42, 0.82)
-          ),
-          url("/static/FinSavvy%20financial%20design%20background.png");
-        background-position: center, center top;
-        background-repeat: no-repeat, no-repeat;
-        background-size: 100% 100%, cover;
-        background-attachment: fixed, fixed;
-      }
-      header {
-        padding: 1.2rem 2rem;
-        background: #020617;
-        border-bottom: 1px solid #1f2937;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
       }
       header h1 {
         margin: 0;
         font-size: 1.4rem;
-      }
-      header span {
-        font-size: 0.9rem;
-        color: #9ca3af;
       }
       main {
         padding: 1.5rem 2rem 3rem;
@@ -295,12 +251,14 @@
       .drill-table th { padding: 0.35rem 0.5rem; }
       .drill-table td { padding: 0.35rem 0.5rem; }
     </style>
+    <link rel="stylesheet" href="/static/app-chrome.css" />
+    <link rel="stylesheet" href="/static/finsavvy_background.css" />
   </head>
-  <body>
+  <body class="finsavvy-app-fill">
     <header>
       <div>
         <h1>Fin Savvy</h1>
-        <span>Account #{{ account_id }} &bull; {{ period_label }}</span>
+        <span class="header-meta-line">Account #{{ account_id }} &bull; {{ period_label }}</span>
       </div>
       <div class="user-area">
         <span class="pill">

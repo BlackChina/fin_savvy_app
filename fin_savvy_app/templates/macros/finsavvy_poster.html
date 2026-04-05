@@ -1,0 +1,30 @@
+{# Auth poster — uses static PNGs extracted from finsavvy_background.html; form in .signin-slot #}
+{% macro finsavvy_auth_poster() -%}
+<div class="finsavvy-bg-viewport">
+  <div class="bg-poster">
+    <div class="calc-overlay"></div>
+    <div class="calc-keys" aria-hidden="true">
+      <div class="key"></div><div class="key"></div><div class="key"></div><div class="key"></div>
+      <div class="key"></div><div class="key"></div><div class="key"></div><div class="key"></div>
+      <div class="key"></div><div class="key"></div><div class="key"></div><div class="key"></div>
+      <div class="key"></div><div class="key"></div><div class="key"></div><div class="key"></div>
+      <div class="key wide"></div><div class="key"></div><div class="key"></div>
+      <div class="key"></div><div class="key"></div><div class="key"></div><div class="key"></div>
+      <div class="key"></div><div class="key"></div><div class="key"></div><div class="key"></div>
+    </div>
+
+    <div class="top-section">
+      <img class="top-brand-img" src="/static/finsavvy_top_brand.png" alt="FinSavvy" />
+    </div>
+
+    <div class="signin-slot">
+      {{ caller() }}
+    </div>
+
+    <div class="bottom-section">
+      <span class="brought-by">brought to you by</span>
+      <img class="bottom-brand-img" src="/static/finsavvy_bottom_brand.png" alt="FooBar IT Solutions" />
+    </div>
+  </div>
+</div>
+{%- endmacro %}
