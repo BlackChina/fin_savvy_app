@@ -4,11 +4,13 @@ from datetime import date, timedelta
 from io import StringIO
 from tempfile import NamedTemporaryFile
 import csv as csv_module
+import hashlib
 import json
 import logging
 import os
 import time
 import uuid
+from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
 from jinja2.exceptions import UndefinedError
@@ -24,6 +26,7 @@ from sqlalchemy.orm import Session
 
 from . import alerts, auth, classifier, crud, csv_parser, insights, models, pdf_parser, receipt_ocr, schemas, tax_calc
 from .database import SessionLocal, init_db
+from .extract_finsavvy_html_assets import sync_poster_pngs_from_background_html
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -48,6 +51,22 @@ _jinja_env = Environment(loader=FileSystemLoader(_template_dir))
 _jinja_env.filters["format_currency"] = _format_currency
 templates = Jinja2Templates(env=_jinja_env)
 static_dir = os.path.join(BASE_DIR, "static")
+
+
+def _set_finsavvy_poster_cache_v() -> None:
+    """Bust browser cache for poster PNGs whenever their bytes change."""
+    sp = Path(static_dir)
+    h = hashlib.sha256()
+    any_png = False
+    for name in ("finsavvy_top_brand.png", "finsavvy_bottom_brand.png"):
+        p = sp / name
+        if p.is_file():
+            h.update(p.read_bytes())
+            any_png = True
+    _jinja_env.globals["finsavvy_poster_v"] = h.hexdigest()[:16] if any_png else "0"
+
+
+_set_finsavvy_poster_cache_v()
 if os.path.isdir(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
 UPLOAD_RECEIPTS_DIR = os.path.join(BASE_DIR, "uploads", "receipts")
@@ -78,6 +97,9 @@ def get_current_user_id(request: Request, db: Session = Depends(get_db)) -> int 
 @app.on_event("startup")
 def on_startup() -> None:
     """Create tables / seed; retry when Postgres is still starting (Docker race)."""
+    sync_poster_pngs_from_background_html(Path(static_dir))
+    _set_finsavvy_poster_cache_v()
+
     max_attempts = 15
     sleep_s = 2
     last: BaseException | None = None

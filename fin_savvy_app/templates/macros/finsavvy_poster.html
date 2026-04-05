@@ -1,4 +1,4 @@
-{# Auth poster — uses static PNGs extracted from finsavvy_background.html; form in .signin-slot #}
+{# Poster images are regenerated from static/finsavvy_background.html on app startup. #}
 {% macro finsavvy_auth_poster() -%}
 <div class="finsavvy-bg-viewport">
   <div class="bg-poster">
@@ -14,7 +14,7 @@
     </div>
 
     <div class="top-section">
-      <img class="top-brand-img" src="/static/finsavvy_top_brand.png" alt="FinSavvy" />
+      <img class="top-brand-img" src="/static/finsavvy_top_brand.png?v={{ finsavvy_poster_v }}" alt="FinSavvy" />
     </div>
 
     <div class="signin-slot">
@@ -22,8 +22,7 @@
     </div>
 
     <div class="bottom-section">
-      <span class="brought-by">brought to you by</span>
-      <img class="bottom-brand-img" src="/static/finsavvy_bottom_brand.png" alt="FooBar IT Solutions" />
+      <img class="bottom-brand-img" src="/static/finsavvy_bottom_brand.png?v={{ finsavvy_poster_v }}" alt="Brought to you by FooBar IT Solutions" />
     </div>
   </div>
 </div>

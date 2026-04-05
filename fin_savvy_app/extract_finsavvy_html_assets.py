@@ -1,42 +1,73 @@
 #!/usr/bin/env python3
-"""Extract data:image base64 PNGs from static/finsavvy_background.html into static/*.png.
+"""Extract data:image base64 blobs from static/finsavvy_background.html into poster PNGs.
 
-Run from repo root or fin_savvy_app:
+Login/register use finsavvy_top_brand.png and finsavvy_bottom_brand.png. The app
+refreshes them from the HTML on startup; you can also run:
+
   python3 extract_finsavvy_html_assets.py
-
-Writes finsavvy_top_brand.png and finsavvy_bottom_brand.png (first img = top, second = bottom).
 """
 from __future__ import annotations
 
 import base64
+import logging
 import re
 import sys
 from pathlib import Path
 
+logger = logging.getLogger(__name__)
+
 BASE = Path(__file__).resolve().parent
-HTML = BASE / "static" / "finsavvy_background.html"
-OUT_TOP = BASE / "static" / "finsavvy_top_brand.png"
-OUT_BOT = BASE / "static" / "finsavvy_bottom_brand.png"
 
 
-def main() -> int:
-    if not HTML.is_file():
-        print("Missing", HTML, file=sys.stderr)
-        return 1
-    text = HTML.read_text(encoding="utf-8", errors="replace")
+def sync_poster_pngs_from_background_html(static_dir: str | Path) -> bool:
+    """Write finsavvy_top_brand.png and finsavvy_bottom_brand.png from finsavvy_background.html.
+
+    Returns True if both files were written; False if HTML missing or fewer than 2 images.
+    """
+    static = Path(static_dir)
+    html_path = static / "finsavvy_background.html"
+    out_top = static / "finsavvy_top_brand.png"
+    out_bot = static / "finsavvy_bottom_brand.png"
+
+    if not html_path.is_file():
+        logger.warning("Missing %s — poster PNGs not refreshed", html_path)
+        return False
+
+    text = html_path.read_text(encoding="utf-8", errors="replace")
     pat = re.compile(
-        r'data:image/(png|jpeg|jpg);base64,([A-Za-z0-9+/=]+)',
+        r"data:image/(png|jpeg|jpg);base64,([\sA-Za-z0-9+/=]+)",
         re.I,
     )
     matches = pat.findall(text)
     if len(matches) < 2:
-        print("Expected at least 2 data:image base64 blobs in HTML, found", len(matches), file=sys.stderr)
-        return 1
+        logger.warning(
+            "finsavvy_background.html must contain at least 2 data:image base64 blobs; found %s",
+            len(matches),
+        )
+        return False
+
     for i, (_, b64) in enumerate(matches[:2]):
-        raw = base64.b64decode(b64)
-        out = OUT_TOP if i == 0 else OUT_BOT
+        raw = base64.b64decode("".join(b64.split()))
+        out = out_top if i == 0 else out_bot
         out.write_bytes(raw)
-        print("Wrote", out, len(raw), "bytes")
+
+    logger.info(
+        "Poster PNGs synced from finsavvy_background.html (%s bytes, %s bytes)",
+        out_top.stat().st_size,
+        out_bot.stat().st_size,
+    )
+    return True
+
+
+def main() -> int:
+    static = BASE / "static"
+    if not sync_poster_pngs_from_background_html(static):
+        print("Sync failed — need static/finsavvy_background.html with 2+ embedded images.", file=sys.stderr)
+        return 1
+    top = static / "finsavvy_top_brand.png"
+    bot = static / "finsavvy_bottom_brand.png"
+    print("Wrote", top, top.stat().st_size, "bytes")
+    print("Wrote", bot, bot.stat().st_size, "bytes")
     return 0
 
 
