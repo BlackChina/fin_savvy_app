@@ -1,11 +1,50 @@
+import os
 from datetime import date, datetime, timedelta
 from secrets import token_urlsafe
-from typing import Iterable
+from typing import Any, Iterable
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from . import auth, classifier, models, schemas
+
+
+def dashboard_dedupe_enabled() -> bool:
+    """When true, dashboard sums and lists count each duplicate import once (same date, amount, description, direction)."""
+    return os.environ.get("FINSAVVY_DASHBOARD_DEDUPE", "1").strip().lower() not in ("0", "false", "no")
+
+
+def dashboard_transaction_dedup_subquery(
+    db: Session,
+    account_id: int,
+    transaction_date_min: date | None,
+    transaction_date_max: date,
+) -> Any | None:
+    """
+    Subquery with column kid = transaction id to keep per fingerprint (min id = first upload).
+    Scoped to transactions whose date is in [min, max] (same as dashboard totals).
+    """
+    if not dashboard_dedupe_enabled():
+        return None
+    desc_norm = func.upper(func.trim(func.coalesce(models.Transaction.description_raw, "")))
+    fl = [
+        models.Statement.bank_account_id == account_id,
+        models.Transaction.date <= transaction_date_max,
+    ]
+    if transaction_date_min is not None:
+        fl.append(models.Transaction.date >= transaction_date_min)
+    return (
+        db.query(func.min(models.Transaction.id).label("kid"))
+        .join(models.Statement)
+        .filter(*fl)
+        .group_by(
+            models.Transaction.date,
+            models.Transaction.amount,
+            desc_norm,
+            models.Transaction.direction,
+        )
+        .subquery()
+    )
 
 
 def get_user_by_username(db: Session, username: str) -> models.User | None:
@@ -342,18 +381,26 @@ def get_party_totals_by_party(
 
 
 def get_available_months(db: Session, account_id: int) -> list[tuple[int, int]]:
-    """Returns list of (year, month) tuples for months that have transactions, newest first."""
-    year_col = func.extract("year", models.Transaction.date)
-    month_col = func.extract("month", models.Transaction.date)
-    rows = (
-        db.query(year_col.label("y"), month_col.label("m"))
+    """Distinct (year, month) from transaction dates and statement period_start (union)."""
+    y_tx = func.extract("year", models.Transaction.date)
+    m_tx = func.extract("month", models.Transaction.date)
+    tx_rows = (
+        db.query(y_tx.label("y"), m_tx.label("m"))
         .join(models.Statement)
         .filter(models.Statement.bank_account_id == account_id)
         .distinct()
-        .order_by(year_col.desc(), month_col.desc())
         .all()
     )
-    return [(int(r.y), int(r.m)) for r in rows]
+    y_st = func.extract("year", models.Statement.period_start)
+    m_st = func.extract("month", models.Statement.period_start)
+    st_rows = (
+        db.query(y_st.label("y"), m_st.label("m"))
+        .filter(models.Statement.bank_account_id == account_id)
+        .distinct()
+        .all()
+    )
+    merged = {(int(r.y), int(r.m)) for r in tx_rows} | {(int(r.y), int(r.m)) for r in st_rows}
+    return sorted(merged, reverse=True)
 
 
 def list_budgets_for_user(

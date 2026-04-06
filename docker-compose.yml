@@ -28,6 +28,8 @@ services:
       FINSAVVY_CLASSIFIER: local
       # Multiclass LR probabilities are often <0.35; 0 = always use top predicted category (see ml_classifier.py)
       FINSAVVY_ML_MIN_PROBABILITY: "0"
+      # Dashboard: collapse duplicate rows from overlapping statement uploads (same date, amount, description)
+      FINSAVVY_DASHBOARD_DEDUPE: "1"
     ports:
       - "8001:8000"
     volumes:

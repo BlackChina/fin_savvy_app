@@ -18,17 +18,36 @@ def compute_dashboard_alerts(
     *,
     user_id: int,
     account_id: int,
-    period_start: date,
-    period_end: date,
+    transaction_date_min: date | None,
+    transaction_date_max: date,
+    receipt_period_start: date,
+    receipt_period_end: date,
 ) -> list[dict[str, Any]]:
     alerts: list[dict[str, Any]] = []
 
-    cash_total = crud.get_cash_withdrawal_total_for_account(
-        db, account_id, period_start, period_end
+    fl = [
+        models.Statement.bank_account_id == account_id,
+        models.Transaction.date <= transaction_date_max,
+    ]
+    if transaction_date_min is not None:
+        fl.append(models.Transaction.date >= transaction_date_min)
+
+    cash_total = (
+        db.query(models.Transaction)
+        .join(models.Statement)
+        .filter(
+            *fl,
+            models.Transaction.is_cash_withdrawal.is_(True),
+        )
+        .all()
     )
-    receipt_total = crud.get_receipt_total_for_user(db, user_id, period_start, period_end)
-    if cash_total > 0:
-        pct = min(100.0, (receipt_total / cash_total) * 100.0) if cash_total else 100.0
+    cash_sum = float(sum(abs(t.amount) for t in cash_total))
+
+    receipt_total = crud.get_receipt_total_for_user(
+        db, user_id, receipt_period_start, receipt_period_end
+    )
+    if cash_sum > 0:
+        pct = min(100.0, (receipt_total / cash_sum) * 100.0) if cash_sum else 100.0
         if pct < 80:
             alerts.append(
                 {
@@ -43,9 +62,7 @@ def compute_dashboard_alerts(
         db.query(models.Transaction)
         .join(models.Statement)
         .filter(
-            models.Statement.bank_account_id == account_id,
-            models.Transaction.date >= period_start,
-            models.Transaction.date <= period_end,
+            *fl,
             models.Transaction.direction == "EXPENSE",
         )
         .all()
@@ -67,8 +84,5 @@ def compute_dashboard_alerts(
                     "message": f"About {(other_total / total_abs * 100):.0f}% of expenses are in “Other”. Add keywords or train the ML classifier for better categories.",
                 }
             )
-
-    if not expenses and cash_total == 0:
-        pass
 
     return alerts

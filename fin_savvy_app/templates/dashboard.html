@@ -24,7 +24,7 @@
       }
       .summary-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
         gap: 1rem;
         margin-bottom: 2rem;
       }
@@ -33,12 +33,23 @@
         border-radius: 0.75rem;
         padding: 1rem 1.2rem;
         border: 1px solid #1f2937;
+        min-width: 0;
       }
       .card h2 {
         margin: 0 0 0.4rem;
         font-size: 0.95rem;
         font-weight: 500;
         color: #9ca3af;
+      }
+      .summary-grid .card .value {
+        font-size: clamp(0.95rem, 2.4vw, 1.35rem);
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.02em;
+        white-space: nowrap;
+        line-height: 1.25;
+        overflow-x: auto;
+        max-width: 100%;
       }
       .card .value {
         font-size: 1.4rem;
@@ -232,7 +243,16 @@
         border-radius: 0.5rem;
       }
       .ledger-label { color: #9ca3af; font-size: 0.9rem; }
-      .ledger-value { font-size: 1.2rem; font-weight: 600; }
+      .ledger-value {
+        font-size: clamp(1rem, 2.5vw, 1.25rem);
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.02em;
+        white-space: nowrap;
+        overflow-x: auto;
+        max-width: 100%;
+        display: inline-block;
+      }
       .chart-container { position: relative; height: 200px; }
       .party-summary-row { cursor: pointer; }
       .party-summary-row:hover { background: #111827 !important; }
@@ -360,8 +380,12 @@
 
       {% if not no_accounts %}
       {% if totals_range_label %}
-      <p style="margin: 0 0 1rem; font-size: 0.85rem; color: #94a3b8;">Figures below use: <strong style="color: #e5e7eb;">{{ totals_range_label }}</strong></p>
+      <p style="margin: 0 0 0.35rem; font-size: 0.85rem; color: #94a3b8;">Figures below use: <strong style="color: #e5e7eb;">{{ totals_range_label }}</strong></p>
       {% endif %}
+      <p style="margin: 0 0 1rem; font-size: 0.8rem; color: #64748b;">
+        Totals are built from <strong>statement uploads</strong>: every line on a statement counts with that file, grouped by the <strong>period start</strong> date you entered (not by picking transactions by calendar month only).
+        {% if dashboard_dedupe_active %}Duplicate lines across uploads collapse to one unless <code style="font-size: 0.75rem;">FINSAVVY_DASHBOARD_DEDUPE=0</code>.{% endif %}
+      </p>
       <section class="summary-grid">
         <div class="card">
           <h2>Total income</h2>
