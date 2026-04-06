@@ -69,10 +69,19 @@
     </style>
     <link rel="stylesheet" href="/static/app-chrome.css" />
     <link rel="stylesheet" href="/static/finsavvy_background.css" />
+    <link rel="stylesheet" href="/static/upload-page.css" />
   </head>
-  <body class="finsavvy-app-fill">
+  <body class="finsavvy-app-fill upload-page">
     <header>
-      <h1>Fin Savvy</h1>
+      <a href="/" class="upload-header-brand" aria-label="FinSavvy home">
+        <img
+          class="upload-header-brand__img"
+          src="/static/finsavvy_top_brand.png"
+          alt="FinSavvy"
+          width="200"
+          height="48"
+        />
+      </a>
       <div class="user-area">
         <span>{{ username }}</span>
         <form method="post" action="/logout" style="margin: 0;">
@@ -93,7 +102,13 @@
       </div>
     </nav>
 
-    <main>
+    <div class="upload-visual-hero" role="presentation" aria-hidden="true">
+      <div class="upload-visual-hero__layer-art"></div>
+      <div class="upload-visual-hero__layer-veil"></div>
+      <div class="upload-visual-hero__accent"></div>
+    </div>
+
+    <main class="upload-main">
       {% if not accounts %}
       <div class="card" style="margin-bottom: 1.5rem;">
         <h2>Add a bank account</h2>
@@ -138,7 +153,7 @@
             <label for="period_end">Period end</label>
             <input type="date" name="period_end" id="period_end" required />
           </div>
-          <p style="margin: 0 0 1rem; font-size: 0.85rem; color: #64748b; max-width: 36rem;">
+          <p style="margin: 0 0 1rem; font-size: 0.85rem; max-width: 36rem;">
             Use the same dates as on the statement header. The dashboard month picker matches <strong>period start</strong> (e.g. March 2026 totals = this file if period start is in March).
           </p>
           <div class="field">
