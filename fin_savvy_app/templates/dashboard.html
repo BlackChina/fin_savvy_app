@@ -270,10 +270,15 @@
       .drill-table { margin: 0 0 0 1.5rem; width: calc(100% - 1.5rem); font-size: 0.8rem; }
       .drill-table th { padding: 0.35rem 0.5rem; }
       .drill-table td { padding: 0.35rem 0.5rem; }
-      .transaction-lists-section {
+      .dashboard-subsection {
         margin-bottom: 2.75rem;
         padding-bottom: 2.75rem;
         border-bottom: 1px solid #334155;
+      }
+      main .dashboard-subsection:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+        padding-bottom: 0;
       }
       details.tx-lists-disclosure {
         background: #020617;
@@ -365,9 +370,6 @@
       }
       details.tx-lists-disclosure:not([open]) > summary {
         border-bottom: none;
-      }
-      .ledger-summary-card {
-        margin-top: 0.35rem;
       }
     </style>
     <link rel="stylesheet" href="/static/app-chrome.css" />
@@ -528,44 +530,66 @@
       </section>
       {% if expense_by_category %}
       {% set cat_vals = expense_by_category.values() | list %}
-      {% if cat_vals and (cat_vals | max) > 0 %}
-      {% set max_cat = cat_vals | max %}
-      <section class="card" style="margin-bottom: 1.5rem;">
-        <div class="section-title">
-          <h2>Spending by category</h2>
-          <span>This period (keyword-based)</span>
-        </div>
-        <div class="category-bars">
-          {% for cat_name, cat_total in expense_by_category.items() %}
-          {% if cat_total %}
-          <div class="category-row">
-            <span class="label">{{ cat_name }}</span>
-            <div class="bar-wrap">
-              <div class="bar {% if cat_name == 'Generosity' %}generosity{% elif cat_name == 'Discretionary' %}discretionary{% else %}other{% endif %}" style="width: {{ (100 * cat_total / max_cat) if max_cat > 0 else 0 }}%;"></div>
+      {% else %}
+      {% set cat_vals = [] %}
+      {% endif %}
+      {% set has_cat_bars = cat_vals and (cat_vals | max) > 0 %}
+      {% if has_cat_bars or cash_receipts_flag %}
+      {% set max_cat = (cat_vals | max) if has_cat_bars else 0 %}
+      <section class="dashboard-subsection" aria-label="Spending breakdown">
+        <details class="tx-lists-disclosure" id="dash-collapse-spending-category" data-storage-key="finsavvy-dash-spending-open">
+          <summary>
+            <span class="tx-lists-disclosure__lead">
+              <span class="tx-lists-disclosure__chevron" aria-hidden="true">▼</span>
+              <span class="tx-lists-disclosure__title">Spending by category</span>
+              <span class="tx-lists-disclosure__meta">
+                {% if has_cat_bars %}Keyword breakdown{% else %}Receipts{% endif %}
+                {% if cash_receipts_flag %}<span style="color: #475569;"> · </span><span class="meta-exp">Cash alert</span>{% endif %}
+              </span>
+            </span>
+            <span class="tx-lists-disclosure__action" data-open-label="Hide section" data-closed-label="Show section">Show section</span>
+          </summary>
+          <div class="tx-lists-disclosure__body">
+            {% if has_cat_bars %}
+            <div class="card" style="margin-bottom: {% if cash_receipts_flag %}1rem{% else %}0{% endif %};">
+              <div class="section-title">
+                <h2>Category totals</h2>
+                <span>This period (keyword-based)</span>
+              </div>
+              <div class="category-bars">
+                {% for cat_name, cat_total in expense_by_category.items() %}
+                {% if cat_total %}
+                <div class="category-row">
+                  <span class="label">{{ cat_name }}</span>
+                  <div class="bar-wrap">
+                    <div class="bar {% if cat_name == 'Generosity' %}generosity{% elif cat_name == 'Discretionary' %}discretionary{% else %}other{% endif %}" style="width: {{ (100 * cat_total / max_cat) if max_cat > 0 else 0 }}%;"></div>
+                  </div>
+                  <div class="value">
+                    <div class="value-main">R {{ cat_total | format_currency }}</div>
+                    {% if budget_by_category.get(cat_name) %}<div class="budget-cap">of R {{ budget_by_category[cat_name] | format_currency }} budget</div>{% endif %}
+                  </div>
+                </div>
+                {% endif %}
+                {% endfor %}
+              </div>
             </div>
-            <div class="value">
-              <div class="value-main">R {{ cat_total | format_currency }}</div>
-              {% if budget_by_category.get(cat_name) %}<div class="budget-cap">of R {{ budget_by_category[cat_name] | format_currency }} budget</div>{% endif %}
+            {% endif %}
+            {% if cash_receipts_flag %}
+            <div class="card" style="border-color: #f97316;">
+              <h2 style="color: #f97316;">Unaccounted cash</h2>
+              <p style="margin: 0; color: #e5e7eb;">
+                Less than 80% of your cash withdrawals are covered by receipts this period. Keeping receipts helps avoid waste from small unrecorded spending.
+              </p>
+              <p style="margin: 0.5rem 0 0; font-size: 0.9rem;"><a href="/receipts" style="color: #38bdf8;">Add receipts</a></p>
             </div>
+            {% endif %}
           </div>
-          {% endif %}
-          {% endfor %}
-        </div>
+        </details>
       </section>
       {% endif %}
-      {% endif %}
-      {% if cash_receipts_flag %}
-      <div class="card" style="border-color: #f97316; margin-bottom: 1.5rem;">
-        <h2 style="color: #f97316;">Unaccounted cash</h2>
-        <p style="margin: 0; color: #e5e7eb;">
-          Less than 80% of your cash withdrawals are covered by receipts this period. Keeping receipts helps avoid waste from small unrecorded spending.
-        </p>
-        <p style="margin: 0.5rem 0 0; font-size: 0.9rem;"><a href="/receipts" style="color: #38bdf8;">Add receipts</a></p>
-      </div>
-      {% endif %}
 
-      <section class="transaction-lists-section" aria-label="Expense and income line items">
-        <details class="tx-lists-disclosure" id="dash-collapse-transaction-tables">
+      <section class="dashboard-subsection" aria-label="Expense and income line items">
+        <details class="tx-lists-disclosure" id="dash-collapse-transaction-tables" data-storage-key="finsavvy-tx-tables-open">
           <summary>
             <span class="tx-lists-disclosure__lead">
               <span class="tx-lists-disclosure__chevron" aria-hidden="true">▼</span>
@@ -666,52 +690,98 @@
         </details>
       </section>
 
-      <section class="card ledger-summary-card" style="margin-bottom: 1.5rem;">
-        <h2 style="margin: 0 0 1rem;">Debit &amp; Credit ledger</h2>
-        <p style="margin: 0 0 1rem; color: #9ca3af; font-size: 0.9rem;">Income vs expenses — {{ totals_range_label or period_label }}.</p>
-        <div class="ledger-grid">
-          <div class="ledger-column ledger-debit">
-            <h3 style="margin: 0 0 0.5rem; font-size: 0.95rem; color: #f97316;">Debit (Expenses)</h3>
-            <div class="ledger-value expense">R {{ (total_expense * -1) | format_currency }}</div>
+      <section class="dashboard-subsection" aria-label="Debit and credit ledger">
+        <details class="tx-lists-disclosure" id="dash-collapse-ledger" data-storage-key="finsavvy-dash-ledger-open">
+          <summary>
+            <span class="tx-lists-disclosure__lead">
+              <span class="tx-lists-disclosure__chevron" aria-hidden="true">▼</span>
+              <span class="tx-lists-disclosure__title">Debit &amp; Credit ledger</span>
+              <span class="tx-lists-disclosure__meta">
+                <span class="meta-exp">Debit R {{ (total_expense * -1) | format_currency }}</span>
+                <span style="color: #475569;"> · </span>
+                <span class="meta-inc">Credit R {{ total_income | format_currency }}</span>
+              </span>
+            </span>
+            <span class="tx-lists-disclosure__action" data-open-label="Hide section" data-closed-label="Show section">Show section</span>
+          </summary>
+          <div class="tx-lists-disclosure__body">
+            <div class="card ledger-summary-card" style="margin-bottom: 0;">
+              <p style="margin: 0 0 1rem; color: #9ca3af; font-size: 0.9rem;">Income vs expenses — {{ totals_range_label or period_label }}.</p>
+              <div class="ledger-grid">
+                <div class="ledger-column ledger-debit">
+                  <h3 style="margin: 0 0 0.5rem; font-size: 0.95rem; color: #f97316;">Debit (Expenses)</h3>
+                  <div class="ledger-value expense">R {{ (total_expense * -1) | format_currency }}</div>
+                </div>
+                <div class="ledger-column ledger-credit">
+                  <h3 style="margin: 0 0 0.5rem; font-size: 0.95rem; color: #22c55e;">Credit (Income)</h3>
+                  <div class="ledger-value income">R {{ total_income | format_currency }}</div>
+                </div>
+              </div>
+              <div class="ledger-balance">
+                <span class="ledger-label">Net cash flow (not bank balance):</span>
+                <span class="ledger-value {% if net >= 0 %}net-positive{% else %}net-negative{% endif %}">R {{ net | format_currency }}</span>
+              </div>
+              {% if net < 0 %}
+              <div class="ledger-warning" style="margin-top: 1rem; padding: 0.75rem; background: rgba(249, 115, 22, 0.15); border-radius: 0.5rem; border-left: 4px solid #f97316;">
+                <strong style="color: #f97316;">Imbalance:</strong> Spending exceeds income this period. {{ (total_expense * -1 - total_income) | format_currency }} more spent than available.
+              </div>
+              {% elif net == 0 %}
+              <div class="ledger-warning" style="margin-top: 1rem; padding: 0.75rem; background: rgba(249, 115, 22, 0.15); border-radius: 0.5rem; border-left: 4px solid #f97316;">
+                <strong style="color: #f97316;">Break-even:</strong> Expenses equal income this period.
+              </div>
+              {% endif %}
+            </div>
           </div>
-          <div class="ledger-column ledger-credit">
-            <h3 style="margin: 0 0 0.5rem; font-size: 0.95rem; color: #22c55e;">Credit (Income)</h3>
-            <div class="ledger-value income">R {{ total_income | format_currency }}</div>
-          </div>
-        </div>
-        <div class="ledger-balance">
-          <span class="ledger-label">Net cash flow (not bank balance):</span>
-          <span class="ledger-value {% if net >= 0 %}net-positive{% else %}net-negative{% endif %}">R {{ net | format_currency }}</span>
-        </div>
-        {% if net < 0 %}
-        <div class="ledger-warning" style="margin-top: 1rem; padding: 0.75rem; background: rgba(249, 115, 22, 0.15); border-radius: 0.5rem; border-left: 4px solid #f97316;">
-          <strong style="color: #f97316;">Imbalance:</strong> Spending exceeds income this period. {{ (total_expense * -1 - total_income) | format_currency }} more spent than available.
-        </div>
-        {% elif net == 0 %}
-        <div class="ledger-warning" style="margin-top: 1rem; padding: 0.75rem; background: rgba(249, 115, 22, 0.15); border-radius: 0.5rem; border-left: 4px solid #f97316;">
-          <strong style="color: #f97316;">Break-even:</strong> Expenses equal income this period.
-        </div>
-        {% endif %}
+        </details>
       </section>
 
-      <section class="layout-grid" style="margin-bottom: 1.5rem;">
-        <div class="card">
-          <h2 style="margin: 0 0 1rem; color: #f97316;">Expense activity</h2>
-          <p style="margin: 0 0 1rem; color: #9ca3af; font-size: 0.85rem;">Daily expenses — {{ totals_range_label or period_label }}.</p>
-          <div class="chart-container">
-            <canvas id="expenseChart" height="200"></canvas>
+      <section class="dashboard-subsection" aria-label="Daily activity charts">
+        <details class="tx-lists-disclosure" id="dash-collapse-activity-charts" data-storage-key="finsavvy-dash-charts-open">
+          <summary>
+            <span class="tx-lists-disclosure__lead">
+              <span class="tx-lists-disclosure__chevron" aria-hidden="true">▼</span>
+              <span class="tx-lists-disclosure__title">Expense &amp; income activity</span>
+              <span class="tx-lists-disclosure__meta">Daily bar charts</span>
+            </span>
+            <span class="tx-lists-disclosure__action" data-open-label="Hide charts" data-closed-label="Show charts">Show charts</span>
+          </summary>
+          <div class="tx-lists-disclosure__body">
+            <div class="layout-grid" style="margin-bottom: 0;">
+              <div class="card">
+                <h2 style="margin: 0 0 1rem; color: #f97316;">Expense activity</h2>
+                <p style="margin: 0 0 1rem; color: #9ca3af; font-size: 0.85rem;">Daily expenses — {{ totals_range_label or period_label }}.</p>
+                <div class="chart-container">
+                  <canvas id="expenseChart" height="200"></canvas>
+                </div>
+              </div>
+              <div class="card">
+                <h2 style="margin: 0 0 1rem; color: #22c55e;">Income activity</h2>
+                <p style="margin: 0 0 1rem; color: #9ca3af; font-size: 0.85rem;">Daily income — {{ totals_range_label or period_label }}.</p>
+                <div class="chart-container">
+                  <canvas id="incomeChart" height="200"></canvas>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-        <div class="card">
-          <h2 style="margin: 0 0 1rem; color: #22c55e;">Income activity</h2>
-          <p style="margin: 0 0 1rem; color: #9ca3af; font-size: 0.85rem;">Daily income — {{ totals_range_label or period_label }}.</p>
-          <div class="chart-container">
-            <canvas id="incomeChart" height="200"></canvas>
-          </div>
-        </div>
+        </details>
       </section>
 
-      <section class="layout-grid">
+      <section class="dashboard-subsection" aria-label="Parties">
+        <details class="tx-lists-disclosure" id="dash-collapse-parties" data-storage-key="finsavvy-dash-parties-open">
+          <summary>
+            <span class="tx-lists-disclosure__lead">
+              <span class="tx-lists-disclosure__chevron" aria-hidden="true">▼</span>
+              <span class="tx-lists-disclosure__title">Parties you pay &amp; receive from</span>
+              <span class="tx-lists-disclosure__meta">
+                <span class="meta-exp">{{ parties_outgoing_detailed|length }} pay</span>
+                <span style="color: #475569;"> · </span>
+                <span class="meta-inc">{{ parties_incoming_detailed|length }} receive</span>
+              </span>
+            </span>
+            <span class="tx-lists-disclosure__action" data-open-label="Hide section" data-closed-label="Show section">Show section</span>
+          </summary>
+          <div class="tx-lists-disclosure__body">
+            <div class="layout-grid">
         <div class="card">
           <div class="section-title">
             <h2>Parties you pay</h2>
@@ -825,6 +895,9 @@
             </tbody>
           </table>
         </div>
+            </div>
+          </div>
+        </details>
       </section>
       {% endif %}
       {% endif %}
@@ -853,26 +926,67 @@
         };
         var incomeBarColors = { bg: 'rgba(34, 197, 94, 0.65)', border: '#22c55e' };
         var expenseBarColors = { bg: 'rgba(249, 115, 22, 0.65)', border: '#f97316' };
-        if (document.getElementById('expenseChart') && expenseLabels.length) {
-          new Chart(document.getElementById('expenseChart'), {
-            type: 'bar',
-            data: {
-              labels: shortExpenseLabels,
-              datasets: [{ data: expenseData, backgroundColor: expenseBarColors.bg, borderColor: expenseBarColors.border, borderWidth: 1 }]
-            },
-            options: chartOpts
-          });
+        var chartsBootstrapped = false;
+        function buildActivityCharts() {
+          if (chartsBootstrapped) return;
+          var expCanvas = document.getElementById('expenseChart');
+          var incCanvas = document.getElementById('incomeChart');
+          if (!expCanvas && !incCanvas) return;
+          if (typeof Chart === 'undefined') return;
+          if (expCanvas && expenseLabels.length) {
+            new Chart(expCanvas, {
+              type: 'bar',
+              data: {
+                labels: shortExpenseLabels,
+                datasets: [{ data: expenseData, backgroundColor: expenseBarColors.bg, borderColor: expenseBarColors.border, borderWidth: 1 }]
+              },
+              options: chartOpts
+            });
+          }
+          if (incCanvas && incomeLabels.length) {
+            new Chart(incCanvas, {
+              type: 'bar',
+              data: {
+                labels: shortIncomeLabels,
+                datasets: [{ data: incomeData, backgroundColor: incomeBarColors.bg, borderColor: incomeBarColors.border, borderWidth: 1 }]
+              },
+              options: chartOpts
+            });
+          }
+          chartsBootstrapped = true;
         }
-        if (document.getElementById('incomeChart') && incomeLabels.length) {
-          new Chart(document.getElementById('incomeChart'), {
-            type: 'bar',
-            data: {
-              labels: shortIncomeLabels,
-              datasets: [{ data: incomeData, backgroundColor: incomeBarColors.bg, borderColor: incomeBarColors.border, borderWidth: 1 }]
-            },
-            options: chartOpts
+        document.querySelectorAll('details.tx-lists-disclosure[data-storage-key]').forEach(function(el) {
+          var key = el.getAttribute('data-storage-key');
+          var action = el.querySelector('.tx-lists-disclosure__action');
+          function syncAction() {
+            if (!action) return;
+            var openL = action.getAttribute('data-open-label') || 'Hide';
+            var closedL = action.getAttribute('data-closed-label') || 'Show';
+            action.textContent = el.open ? openL : closedL;
+          }
+          try {
+            if (sessionStorage.getItem(key) === '1') {
+              el.setAttribute('open', '');
+            }
+          } catch (e) {}
+          syncAction();
+          el.addEventListener('toggle', function() {
+            syncAction();
+            try {
+              if (el.open) {
+                sessionStorage.setItem(key, '1');
+              } else {
+                sessionStorage.removeItem(key);
+              }
+            } catch (e) {}
+            if (el.id === 'dash-collapse-activity-charts' && el.open) {
+              requestAnimationFrame(buildActivityCharts);
+            }
           });
-        }
+          if (el.id === 'dash-collapse-activity-charts' && el.open) {
+            requestAnimationFrame(buildActivityCharts);
+          }
+        });
       })();
       document.querySelectorAll('.drill-down-btn').forEach(function(btn) {
         btn.addEventListener('click', function() {
@@ -886,35 +1000,6 @@
           this.textContent = isHidden ? '▲ Hide transactions' : '▼ Show transactions';
         });
       });
-      (function() {
-        var id = 'dash-collapse-transaction-tables';
-        var key = 'finsavvy-tx-tables-open';
-        var el = document.getElementById(id);
-        if (!el) return;
-        var action = el.querySelector('.tx-lists-disclosure__action');
-        function syncAction() {
-          if (!action) return;
-          var openL = action.getAttribute('data-open-label') || 'Hide tables';
-          var closedL = action.getAttribute('data-closed-label') || 'Show tables';
-          action.textContent = el.open ? openL : closedL;
-        }
-        try {
-          if (sessionStorage.getItem(key) === '1') {
-            el.setAttribute('open', '');
-          }
-        } catch (e) {}
-        syncAction();
-        el.addEventListener('toggle', function() {
-          syncAction();
-          try {
-            if (el.open) {
-              sessionStorage.setItem(key, '1');
-            } else {
-              sessionStorage.removeItem(key);
-            }
-          } catch (e) {}
-        });
-      })();
     </script>
   </body>
 </html>
