@@ -15,7 +15,7 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 from jinja2.exceptions import UndefinedError
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -1087,7 +1087,7 @@ os.makedirs(UPLOAD_PAYSLIPS_DIR, exist_ok=True)
 @app.get("/receipts", response_class=HTMLResponse)
 def receipts_page(
     request: Request,
-    account_id: int | None = None,
+    account_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
     user_id: int | None = Depends(get_current_user_id),
 ) -> HTMLResponse:
@@ -1095,7 +1095,6 @@ def receipts_page(
     if not user or user_id is None:
         return RedirectResponse(url="/login", status_code=303)
     accounts = crud.list_bank_accounts(db, user_id)
-    account_id = request.query_params.get("account_id", type=int) or account_id
     if accounts and account_id is None:
         account_id = accounts[0].id
     if account_id and not crud.get_bank_account_for_user(db, account_id, user_id):
