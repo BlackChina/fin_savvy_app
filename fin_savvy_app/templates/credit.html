@@ -38,10 +38,19 @@
     </style>
     <link rel="stylesheet" href="/static/app-chrome.css" />
     <link rel="stylesheet" href="/static/finsavvy_background.css" />
+    <link rel="stylesheet" href="/static/credit-page.css" />
   </head>
-  <body class="finsavvy-app-fill">
+  <body class="finsavvy-app-fill credit-page">
     <header>
-      <h1>Fin Savvy</h1>
+      <a href="/" class="credit-header-brand" aria-label="FinSavvy home">
+        <img
+          class="credit-header-brand__img"
+          src="/static/finsavvy_top_brand.png"
+          alt="FinSavvy"
+          width="200"
+          height="48"
+        />
+      </a>
       <div class="user-area">
         <span>{{ username }}</span>
         <form method="post" action="/logout" style="margin: 0;">
@@ -62,7 +71,13 @@
       </div>
     </nav>
 
-    <main>
+    <div class="credit-visual-hero" role="presentation" aria-hidden="true">
+      <div class="credit-visual-hero__layer-art"></div>
+      <div class="credit-visual-hero__layer-veil"></div>
+      <div class="credit-visual-hero__accent"></div>
+    </div>
+
+    <main class="credit-main">
       <div class="card">
         <h2>Credit score</h2>
         <p>
@@ -71,7 +86,7 @@
         <p style="margin-top: 1rem;">
           This feature is coming soon. You will be able to link your profile to a bureau (e.g. Experian, TransUnion) or enter your score manually to track it over time.
         </p>
-        <p style="margin-top: 1rem; font-size: 0.9rem; color: #9ca3af;">
+        <p style="margin-top: 1rem; font-size: 0.9rem;">
           <strong>API (for integrations):</strong>
           <code>GET /api/credit/score</code> (session cookie required).
           {% if credit_configured %}
