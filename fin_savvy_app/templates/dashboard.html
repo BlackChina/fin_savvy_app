@@ -383,17 +383,17 @@
       <p style="margin: 0 0 0.35rem; font-size: 0.85rem; color: #94a3b8;">Figures below use: <strong style="color: #e5e7eb;">{{ totals_range_label }}</strong></p>
       {% endif %}
       <p style="margin: 0 0 1rem; font-size: 0.8rem; color: #64748b;">
-        Totals are built from <strong>statement uploads</strong>: every line on a statement counts with that file, grouped by the <strong>period start</strong> date you entered (not by picking transactions by calendar month only).
+        Totals use <strong>each line’s transaction date</strong> within the range above (from your statement uploads).
         {% if dashboard_dedupe_active %}Duplicate lines across uploads collapse to one unless <code style="font-size: 0.75rem;">FINSAVVY_DASHBOARD_DEDUPE=0</code>.{% endif %}
       </p>
       <section class="summary-grid">
         <div class="card">
-          <h2>Total income</h2>
-          <div class="value income">R {{ total_income | format_currency }}</div>
-        </div>
-        <div class="card">
           <h2>Total expenses</h2>
           <div class="value expense">R {{ (total_expense * -1) | format_currency }}</div>
+        </div>
+        <div class="card">
+          <h2>Total income</h2>
+          <div class="value income">R {{ total_income | format_currency }}</div>
         </div>
         <div class="card">
           <h2>Net</h2>
@@ -551,13 +551,13 @@
         <h2 style="margin: 0 0 1rem;">Debit & Credit ledger</h2>
         <p style="margin: 0 0 1rem; color: #9ca3af; font-size: 0.9rem;">Income vs expenses — {{ totals_range_label or period_label }}.</p>
         <div class="ledger-grid">
-          <div class="ledger-column ledger-credit">
-            <h3 style="margin: 0 0 0.5rem; font-size: 0.95rem; color: #22c55e;">Credit (Income)</h3>
-            <div class="ledger-value income">R {{ total_income | format_currency }}</div>
-          </div>
           <div class="ledger-column ledger-debit">
             <h3 style="margin: 0 0 0.5rem; font-size: 0.95rem; color: #f97316;">Debit (Expenses)</h3>
             <div class="ledger-value expense">R {{ (total_expense * -1) | format_currency }}</div>
+          </div>
+          <div class="ledger-column ledger-credit">
+            <h3 style="margin: 0 0 0.5rem; font-size: 0.95rem; color: #22c55e;">Credit (Income)</h3>
+            <div class="ledger-value income">R {{ total_income | format_currency }}</div>
           </div>
         </div>
         <div class="ledger-balance">
@@ -577,17 +577,17 @@
 
       <section class="layout-grid" style="margin-bottom: 1.5rem;">
         <div class="card">
-          <h2 style="margin: 0 0 1rem;">Income activity</h2>
-          <p style="margin: 0 0 1rem; color: #9ca3af; font-size: 0.85rem;">Daily income — {{ totals_range_label or period_label }}.</p>
-          <div class="chart-container">
-            <canvas id="incomeChart" height="200"></canvas>
-          </div>
-        </div>
-        <div class="card">
-          <h2 style="margin: 0 0 1rem;">Expense activity</h2>
+          <h2 style="margin: 0 0 1rem; color: #f97316;">Expense activity</h2>
           <p style="margin: 0 0 1rem; color: #9ca3af; font-size: 0.85rem;">Daily expenses — {{ totals_range_label or period_label }}.</p>
           <div class="chart-container">
             <canvas id="expenseChart" height="200"></canvas>
+          </div>
+        </div>
+        <div class="card">
+          <h2 style="margin: 0 0 1rem; color: #22c55e;">Income activity</h2>
+          <p style="margin: 0 0 1rem; color: #9ca3af; font-size: 0.85rem;">Daily income — {{ totals_range_label or period_label }}.</p>
+          <div class="chart-container">
+            <canvas id="incomeChart" height="200"></canvas>
           </div>
         </div>
       </section>
@@ -732,22 +732,24 @@
             y: { ticks: { color: '#9ca3af' }, grid: { color: '#1f2937' } }
           }
         };
-        if (document.getElementById('incomeChart') && incomeLabels.length) {
-          new Chart(document.getElementById('incomeChart'), {
-            type: 'bar',
-            data: {
-              labels: shortIncomeLabels,
-              datasets: [{ data: incomeData, backgroundColor: 'rgba(34, 197, 94, 0.6)', borderColor: '#22c55e', borderWidth: 1 }]
-            },
-            options: chartOpts
-          });
-        }
+        var incomeBarColors = { bg: 'rgba(34, 197, 94, 0.65)', border: '#22c55e' };
+        var expenseBarColors = { bg: 'rgba(249, 115, 22, 0.65)', border: '#f97316' };
         if (document.getElementById('expenseChart') && expenseLabels.length) {
           new Chart(document.getElementById('expenseChart'), {
             type: 'bar',
             data: {
               labels: shortExpenseLabels,
-              datasets: [{ data: expenseData, backgroundColor: 'rgba(249, 115, 22, 0.6)', borderColor: '#f97316', borderWidth: 1 }]
+              datasets: [{ data: expenseData, backgroundColor: expenseBarColors.bg, borderColor: expenseBarColors.border, borderWidth: 1 }]
+            },
+            options: chartOpts
+          });
+        }
+        if (document.getElementById('incomeChart') && incomeLabels.length) {
+          new Chart(document.getElementById('incomeChart'), {
+            type: 'bar',
+            data: {
+              labels: shortIncomeLabels,
+              datasets: [{ data: incomeData, backgroundColor: incomeBarColors.bg, borderColor: incomeBarColors.border, borderWidth: 1 }]
             },
             options: chartOpts
           });
