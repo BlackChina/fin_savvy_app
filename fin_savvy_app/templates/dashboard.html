@@ -188,15 +188,117 @@
         color: #e5e7eb;
         background: #1f2937;
       }
-      .filters {
+      .dashboard-filters {
         display: flex;
-        gap: 0.75rem;
-        align-items: center;
-        margin-bottom: 1.5rem;
         flex-wrap: wrap;
+        align-items: flex-end;
+        gap: 1rem 1.35rem;
+        margin-bottom: 1.5rem;
+        padding: 1.1rem 1.25rem;
+        background: #0f172a;
+        border: 1px solid #334155;
+        border-radius: 0.75rem;
+        box-sizing: border-box;
       }
-      .filters label { font-size: 0.8rem; color: #9ca3af; }
-      .filters select {
+      .dashboard-filters .filters-field {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.4rem;
+        min-width: 0;
+        flex: 1 1 10.5rem;
+        max-width: 22rem;
+      }
+      .dashboard-filters .filters-field--search {
+        flex: 1 1 14rem;
+        max-width: 28rem;
+      }
+      .dashboard-filters .filters-field label {
+        font-size: 0.7rem;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: #94a3b8;
+        line-height: 1.2;
+      }
+      .dashboard-filters select,
+      .dashboard-filters .filters-input {
+        width: 100%;
+        box-sizing: border-box;
+        min-height: 2.35rem;
+        padding: 0.45rem 0.65rem;
+        border-radius: 0.45rem;
+        border: 1px solid #475569;
+        background: #020617;
+        color: #e5e7eb;
+        font-size: 0.875rem;
+        line-height: 1.25;
+      }
+      .dashboard-filters select {
+        cursor: pointer;
+      }
+      .dashboard-filters .filters-input::placeholder {
+        color: #64748b;
+      }
+      .dashboard-filters .filters-input:focus,
+      .dashboard-filters select:focus {
+        outline: none;
+        border-color: #38bdf8;
+        box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.25);
+      }
+      .dashboard-filters .filters-actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.65rem 1rem;
+        flex-shrink: 0;
+        margin-left: auto;
+        padding-bottom: 0.05rem;
+      }
+      .dashboard-filters .filters-btn {
+        min-height: 2.35rem;
+        padding: 0 1rem;
+        border-radius: 0.45rem;
+        border: 1px solid #475569;
+        background: #1e293b;
+        color: #f1f5f9;
+        font-size: 0.875rem;
+        font-weight: 500;
+        cursor: pointer;
+      }
+      .dashboard-filters .filters-btn:hover {
+        background: #334155;
+        border-color: #64748b;
+      }
+      .dashboard-filters .filters-link {
+        font-size: 0.875rem;
+        color: #38bdf8;
+        text-decoration: none;
+        white-space: nowrap;
+        font-weight: 500;
+      }
+      .dashboard-filters .filters-link:hover {
+        color: #7dd3fc;
+        text-decoration: underline;
+      }
+      @media (max-width: 640px) {
+        .dashboard-filters .filters-actions {
+          margin-left: 0;
+          width: 100%;
+          justify-content: flex-start;
+        }
+      }
+      .filters-inline {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.65rem 0.85rem;
+      }
+      .filters-inline label {
+        font-size: 0.8rem;
+        color: #9ca3af;
+      }
+      .filters-inline select {
         padding: 0.35rem 0.6rem;
         border-radius: 0.4rem;
         border: 1px solid #374151;
@@ -412,10 +514,10 @@
         <p style="margin: 0; font-size: 0.9rem;"><a href="/upload" style="color: #38bdf8;">Go to Upload statement</a> to get started.</p>
       </div>
       {% else %}
-      <form method="get" action="/" class="filters">
+      <form method="get" action="/" class="dashboard-filters">
         <input type="hidden" name="expense_sort" value="{{ expense_sort }}">
         <input type="hidden" name="income_sort" value="{{ income_sort }}">
-        <div>
+        <div class="filters-field">
           <label for="summary_scope">Totals cover</label>
           <select name="summary_scope" id="summary_scope" onchange="this.form.submit()" autocomplete="off" title="Which transactions feed the summary cards, charts, and tables">
             <option value="month" {% if summary_scope == 'month' %}selected{% endif %}>This month only</option>
@@ -423,7 +525,7 @@
             <option value="cumulative" {% if summary_scope == 'cumulative' %}selected{% endif %}>All history through selected month</option>
           </select>
         </div>
-        <div>
+        <div class="filters-field">
           <label for="account_id">Account</label>
           <select name="account_id" id="account_id" onchange="this.form.submit()">
             {% for acc in accounts %}
@@ -434,7 +536,7 @@
           </select>
         </div>
         {% if available_months %}
-        <div>
+        <div class="filters-field">
           <label for="period">Period</label>
           <select name="period" id="period" onchange="this.form.submit()" autocomplete="off">
             {% for y, m in available_months %}
@@ -445,18 +547,16 @@
           </select>
         </div>
         {% endif %}
-        <div style="min-width: 160px;">
+        <div class="filters-field filters-field--search">
           <label for="q">Search description</label>
-          <input type="search" name="q" id="q" value="{{ search_q }}" placeholder="Filter…" style="padding: 0.35rem 0.6rem; border-radius: 0.4rem; border: 1px solid #374151; background: #020617; color: #e5e7eb; font-size: 0.85rem; width: 100%; box-sizing: border-box;" />
+          <input type="search" name="q" id="q" class="filters-input" value="{{ search_q }}" placeholder="Filter by text…" autocomplete="off" />
         </div>
-        <div style="align-self: flex-end;">
-          <button type="submit" style="padding: 0.4rem 0.8rem; border-radius: 0.4rem; border: 1px solid #374151; background: #1e293b; color: #e5e7eb; cursor: pointer; font-size: 0.85rem;">Apply</button>
+        <div class="filters-actions">
+          <button type="submit" class="filters-btn">Apply</button>
+          {% if year and month %}
+          <a href="/export/transactions.csv?account_id={{ account_id }}&amp;period={{ year }}-{{ '%02d'|format(month) }}&amp;summary_scope={{ summary_scope }}" class="filters-link">Download CSV</a>
+          {% endif %}
         </div>
-        {% if year and month %}
-        <div style="align-self: flex-end;">
-          <a href="/export/transactions.csv?account_id={{ account_id }}&amp;period={{ year }}-{{ '%02d'|format(month) }}&amp;summary_scope={{ summary_scope }}" style="color: #38bdf8; font-size: 0.85rem; white-space: nowrap;">Download CSV</a>
-        </div>
-        {% endif %}
       </form>
 
       {% if dashboard_alerts %}
@@ -609,7 +709,7 @@
                   <h2 style="color: #f97316;">Expenses</h2>
                   <span>{{ all_expenses|length }} this period</span>
                 </div>
-                <form method="get" action="/" class="filters" style="margin-bottom: 0.75rem;">
+                <form method="get" action="/" class="filters-inline" style="margin-bottom: 0.75rem;">
                   <input type="hidden" name="account_id" value="{{ account_id }}">
                   {% if year and month %}<input type="hidden" name="period" value="{{ year }}-{{ '%02d'|format(month) }}">{% endif %}
                   {% if search_q %}<input type="hidden" name="q" value="{{ search_q }}">{% endif %}
@@ -650,7 +750,7 @@
                   <h2 style="color: #22c55e;">Income</h2>
                   <span>{{ all_income|length }} this period</span>
                 </div>
-                <form method="get" action="/" class="filters" style="margin-bottom: 0.75rem;">
+                <form method="get" action="/" class="filters-inline" style="margin-bottom: 0.75rem;">
                   <input type="hidden" name="account_id" value="{{ account_id }}">
                   {% if year and month %}<input type="hidden" name="period" value="{{ year }}-{{ '%02d'|format(month) }}">{% endif %}
                   {% if search_q %}<input type="hidden" name="q" value="{{ search_q }}">{% endif %}
