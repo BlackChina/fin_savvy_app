@@ -1,0 +1,141 @@
+/* Tax section — translucent cyberpunk backdrop; FinSavvy mark lives in the header only */
+
+body.tax-page.finsavvy-app-fill {
+  color: #e2e8f0;
+  background-color: #020617;
+}
+
+/* Replace default light app-fill backdrop */
+body.tax-page.finsavvy-app-fill::before {
+  background:
+    linear-gradient(180deg, rgba(2, 6, 23, 0.88) 0%, rgba(15, 23, 42, 0.92) 50%, rgba(2, 6, 23, 0.95) 100%),
+    url("/static/tax-cyberpunk-hero.png") center / cover no-repeat fixed;
+  z-index: -2;
+}
+
+body.tax-page.finsavvy-app-fill::after {
+  background:
+    radial-gradient(ellipse 100% 80% at 50% -10%, rgba(56, 189, 248, 0.14) 0%, transparent 50%),
+    radial-gradient(ellipse 70% 50% at 80% 100%, rgba(14, 165, 233, 0.08) 0%, transparent 45%);
+  z-index: -1;
+}
+
+/* Header / chrome tuned for dark tax theme */
+body.tax-page.finsavvy-app-fill header {
+  background: rgba(15, 23, 42, 0.78);
+  border-bottom: 1px solid rgba(51, 65, 85, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+body.tax-page.finsavvy-app-fill header .tax-header-brand {
+  display: flex;
+  align-items: center;
+  line-height: 0;
+  margin: 0;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+body.tax-page.finsavvy-app-fill header .tax-header-brand:focus-visible {
+  outline: 2px solid rgba(56, 189, 248, 0.65);
+  outline-offset: 4px;
+  border-radius: 0.25rem;
+}
+
+body.tax-page.finsavvy-app-fill header .tax-header-brand__img {
+  height: clamp(2rem, 4.5vw, 2.65rem);
+  width: auto;
+  max-width: min(220px, 52vw);
+  display: block;
+  object-fit: contain;
+}
+
+body.tax-page.finsavvy-app-fill .user-area {
+  color: #94a3b8;
+}
+
+body.tax-page.finsavvy-app-fill .logout-button {
+  border-color: #475569;
+  color: #cbd5e1;
+}
+
+body.tax-page.finsavvy-app-fill .logout-button:hover {
+  background: rgba(51, 65, 85, 0.45);
+  color: #f8fafc;
+}
+
+/* Hero: cyberpunk art only */
+.tax-visual-hero {
+  position: relative;
+  min-height: clamp(148px, 26vw, 248px);
+  margin: 0 2rem 1.35rem;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  border: 1px solid rgba(51, 65, 85, 0.65);
+  box-shadow:
+    0 0 0 1px rgba(56, 189, 248, 0.06),
+    0 12px 40px rgba(0, 0, 0, 0.45);
+  isolation: isolate;
+}
+
+.tax-visual-hero__layer-cyber {
+  position: absolute;
+  inset: 0;
+  background: url("/static/tax-cyberpunk-hero.png") center / cover no-repeat;
+  opacity: 0.5;
+  transform: scale(1.02);
+}
+
+.tax-visual-hero__layer-veil {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(2, 6, 23, 0.2) 0%,
+    rgba(2, 6, 23, 0.45) 45%,
+    rgba(2, 6, 23, 0.78) 100%
+  );
+  pointer-events: none;
+}
+
+.tax-visual-hero__accent {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.55), rgba(34, 197, 94, 0.35), transparent);
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+/* Main column: glass cards over the backdrop */
+body.tax-page.finsavvy-app-fill main.tax-main {
+  position: relative;
+  z-index: 0;
+  max-width: 560px;
+  padding-top: 0.25rem;
+}
+
+body.tax-page.finsavvy-app-fill main.tax-main .card {
+  background: rgba(15, 23, 42, 0.82);
+  border: 1px solid rgba(51, 65, 85, 0.75);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+}
+
+body.tax-page.finsavvy-app-fill main.tax-main .tax-result {
+  background: rgba(2, 6, 23, 0.55);
+  border: 1px solid rgba(51, 65, 85, 0.5);
+}
+
+body.tax-page.finsavvy-app-fill main.tax-main .hint {
+  color: #94a3b8;
+}
+
+@media (max-width: 640px) {
+  .tax-visual-hero {
+    margin-left: 1rem;
+    margin-right: 1rem;
+  }
+}

@@ -68,10 +68,19 @@
     </style>
     <link rel="stylesheet" href="/static/app-chrome.css" />
     <link rel="stylesheet" href="/static/finsavvy_background.css" />
+    <link rel="stylesheet" href="/static/tax-page.css" />
   </head>
-  <body class="finsavvy-app-fill">
+  <body class="finsavvy-app-fill tax-page">
     <header>
-      <h1>Fin Savvy</h1>
+      <a href="/" class="tax-header-brand" aria-label="FinSavvy home">
+        <img
+          class="tax-header-brand__img"
+          src="/static/finsavvy_top_brand.png"
+          alt="FinSavvy"
+          width="200"
+          height="48"
+        />
+      </a>
       <div class="user-area">
         <span>{{ username }}</span>
         <form method="post" action="/logout" style="margin: 0;">
@@ -92,7 +101,13 @@
       </div>
     </nav>
 
-    <main>
+    <div class="tax-visual-hero" role="presentation" aria-hidden="true">
+      <div class="tax-visual-hero__layer-cyber"></div>
+      <div class="tax-visual-hero__layer-veil"></div>
+      <div class="tax-visual-hero__accent"></div>
+    </div>
+
+    <main class="tax-main">
       <div class="card">
         <h2>Tax calculator (SA 2025)</h2>
         <p class="hint">Estimate income tax for the year. Enter your annual taxable income (ZAR).</p>
