@@ -12,8 +12,6 @@
       min-height: 100dvh;
       position: relative;
     }
-    nav { display: flex; gap: 0.5rem; margin: 1rem 2rem; flex-wrap: wrap; }
-    nav a { color: #9ca3af; text-decoration: none; }
     main { padding: 2rem; max-width: 720px; }
     .card { background: #020617; border-radius: 0.75rem; padding: 1.5rem 2rem; border: 1px solid #1f2937; margin-bottom: 1.5rem; }
     h2 { margin: 0 0 0.75rem; font-size: 1.1rem; }
@@ -32,14 +30,16 @@
       <form method="post" action="/logout" style="margin:0;"><button type="submit" class="logout-button">Log out</button></form>
     </div>
   </header>
-  <nav>
-    <a href="/">Dashboard</a>
-    <a href="/upload">Upload</a>
-    <a href="/receipts">Receipts</a>
-    <a href="/budgets">Budgets</a>
-    <a href="/tax">Tax</a>
-    <a href="/credit">Credit</a>
-    <a href="/settings" class="active">Settings</a>
+  <nav class="app-nav" aria-label="Main">
+    <div class="app-nav__links">
+      <a href="/">Dashboard</a>
+      <a href="/upload">Upload statement</a>
+      <a href="/receipts">Receipts</a>
+      <a href="/budgets">Budgets</a>
+      <a href="/tax">Tax</a>
+      <a href="/credit">Credit score</a>
+      <a href="/settings" class="active">Settings</a>
+    </div>
   </nav>
   <main>
     <div class="card">

@@ -4,8 +4,6 @@
 <style>
 html{height:100%}
 body{font-family:system-ui,sans-serif;margin:0;min-height:100%;min-height:100dvh;position:relative}
-nav{display:flex;gap:.5rem;margin:1rem 2rem;flex-wrap:wrap}
-nav a{color:#9ca3af;text-decoration:none;font-size:.9rem}
 main{padding:2rem;max-width:640px}
 .card{background:#020617;border-radius:.75rem;padding:1.5rem 2rem;border:1px solid #1f2937;margin-bottom:1.5rem}
 h2{margin:0 0 1rem;font-size:1.1rem}
@@ -24,9 +22,16 @@ th,td{padding:.5rem;text-align:left;border-bottom:1px solid #1f2937}
 <header><h1 style="margin:0;font-size:1.4rem">Fin Savvy</h1>
 <div style="display:flex;gap:.75rem;align-items:center;font-size:.85rem"><span>{{ username }}</span>
 <form method="post" action="/logout" style="margin:0"><button type="submit" class="logout-button">Log out</button></form></div></header>
-<nav>
-<a href="/">Dashboard</a><a href="/upload">Upload</a><a href="/receipts">Receipts</a>
-<a href="/budgets" class="active">Budgets</a><a href="/tax">Tax</a><a href="/credit">Credit</a><a href="/settings">Settings</a>
+<nav class="app-nav" aria-label="Main">
+<div class="app-nav__links">
+<a href="/">Dashboard</a>
+<a href="/upload">Upload statement</a>
+<a href="/receipts">Receipts</a>
+<a href="/budgets" class="active">Budgets</a>
+<a href="/tax">Tax</a>
+<a href="/credit">Credit score</a>
+<a href="/settings">Settings</a>
+</div>
 </nav>
 <main>
 {% if not accounts %}

@@ -172,22 +172,6 @@
       .logout-button:hover {
         background: #111827;
       }
-      nav {
-        display: flex;
-        gap: 0.5rem;
-        margin-bottom: 1rem;
-      }
-      nav a {
-        color: #9ca3af;
-        text-decoration: none;
-        font-size: 0.9rem;
-        padding: 0.25rem 0.5rem;
-        border-radius: 0.4rem;
-      }
-      nav a:hover, nav a.active {
-        color: #e5e7eb;
-        background: #1f2937;
-      }
       .dashboard-filters {
         display: flex;
         flex-wrap: wrap;
@@ -496,8 +480,8 @@
       </div>
     </header>
 
-    <main>
-      <nav>
+    <nav class="app-nav" aria-label="Main">
+      <div class="app-nav__links">
         <a href="/" class="active">Dashboard</a>
         <a href="/upload">Upload statement</a>
         <a href="/receipts">Receipts</a>
@@ -505,8 +489,10 @@
         <a href="/tax">Tax</a>
         <a href="/credit">Credit score</a>
         <a href="/settings">Settings</a>
-      </nav>
+      </div>
+    </nav>
 
+    <main>
       {% if no_accounts %}
       <div class="card" style="max-width: 480px;">
         <h2>No bank account yet</h2>

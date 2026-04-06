@@ -26,9 +26,6 @@
         font-size: 0.75rem;
         cursor: pointer;
       }
-      nav { display: flex; gap: 0.5rem; margin: 1rem 2rem; }
-      nav a { color: #9ca3af; text-decoration: none; font-size: 0.9rem; }
-      nav a:hover { color: #e5e7eb; }
       main { padding: 2rem; max-width: 520px; }
       .card {
         background: #020617;
@@ -53,14 +50,16 @@
       </div>
     </header>
 
-    <nav>
-      <a href="/">Dashboard</a>
-      <a href="/upload">Upload statement</a>
-      <a href="/receipts">Receipts</a>
-      <a href="/budgets">Budgets</a>
-      <a href="/tax">Tax</a>
-      <a href="/credit" class="active">Credit score</a>
-      <a href="/settings">Settings</a>
+    <nav class="app-nav" aria-label="Main">
+      <div class="app-nav__links">
+        <a href="/">Dashboard</a>
+        <a href="/upload">Upload statement</a>
+        <a href="/receipts">Receipts</a>
+        <a href="/budgets">Budgets</a>
+        <a href="/tax">Tax</a>
+        <a href="/credit" class="active">Credit score</a>
+        <a href="/settings">Settings</a>
+      </div>
     </nav>
 
     <main>
