@@ -33,6 +33,24 @@ BOSSASOMERSET,Dining,Bossa
 
 Export from Excel/Sheets or type rows. The more rows (e.g. 50+), the better the model. You can start from `fin_savvy_app/data/labeled_transactions.csv` and add your real data.
 
+**Export from your database (hints for labeling):** unique descriptions with current classifier guesses and extra columns (`count`, `last_date`, `avg_amount`) are written by:
+
+```bash
+docker compose run --rm app python -m fin_savvy_app.export_training_csv \
+  -o /app/fin_savvy_app/data/export_candidates.csv --username mfundo
+```
+
+**Merge** a hand-edited file on top of the seed CSV (dedupe by normalized description; overlays win):
+
+```bash
+docker compose run --rm app python -m fin_savvy_app.merge_labeled_csv \
+  --base /app/fin_savvy_app/data/labeled_transactions.csv \
+  --overlay /app/fin_savvy_app/data/my_labels.csv \
+  -o /app/fin_savvy_app/data/labeled_merged.csv
+```
+
+End-to-end checklist: `docs/Classification_Training_Workflow.md`.
+
 ### 2. Train the models
 
 From the **project root** (e.g. `foobar-it-solutions`).
