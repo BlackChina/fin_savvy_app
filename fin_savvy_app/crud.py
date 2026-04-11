@@ -415,6 +415,82 @@ def list_distinct_budget_months_for_user(db: Session, user_id: int, limit: int =
     return labels[:limit]
 
 
+def list_distinct_budget_years_for_account(db: Session, user_id: int, bank_account_id: int) -> list[int]:
+    """Years that have at least one budget row for this user and account (or global rows)."""
+    rows = (
+        db.query(models.MonthlyBudget.year_month)
+        .filter(
+            models.MonthlyBudget.user_id == user_id,
+            (models.MonthlyBudget.bank_account_id == bank_account_id)
+            | (models.MonthlyBudget.bank_account_id.is_(None)),
+        )
+        .distinct()
+        .all()
+    )
+    years: set[int] = set()
+    for (ym,) in rows:
+        if ym and len(str(ym)) >= 7:
+            try:
+                years.add(int(str(ym)[:4]))
+            except ValueError:
+                pass
+    return sorted(years, reverse=True)
+
+
+def list_budget_months_numeric_for_year(
+    db: Session, user_id: int, bank_account_id: int, year: int
+) -> list[int]:
+    prefix = f"{year}-"
+    rows = (
+        db.query(models.MonthlyBudget.year_month)
+        .filter(
+            models.MonthlyBudget.user_id == user_id,
+            models.MonthlyBudget.year_month.like(f"{prefix}%"),
+            (models.MonthlyBudget.bank_account_id == bank_account_id)
+            | (models.MonthlyBudget.bank_account_id.is_(None)),
+        )
+        .distinct()
+        .all()
+    )
+    months: set[int] = set()
+    for (ym,) in rows:
+        if not ym or len(str(ym)) < 7:
+            continue
+        try:
+            m = int(str(ym)[5:7])
+            if 1 <= m <= 12:
+                months.add(m)
+        except ValueError:
+            pass
+    return sorted(months)
+
+
+def list_learned_category_labels(
+    db: Session, user_id: int, account_id: int, *, lookback_days: int = 420, limit: int = 50
+) -> list[str]:
+    """Distinct classifier labels from recent expenses (learned / recurring patterns)."""
+    start = date.today() - timedelta(days=lookback_days)
+    rows = (
+        db.query(models.Transaction)
+        .join(models.Statement)
+        .join(models.BankAccount)
+        .filter(
+            models.BankAccount.user_id == user_id,
+            models.Statement.bank_account_id == account_id,
+            models.Transaction.date >= start,
+            models.Transaction.direction == "EXPENSE",
+        )
+        .limit(8000)
+        .all()
+    )
+    labels: set[str] = set()
+    for t in rows:
+        lab = classifier.get_category_label(t.description_raw, t.amount)
+        if lab and lab.strip():
+            labels.add(lab.strip())
+    return sorted(labels)[:limit]
+
+
 def list_budgets_for_user(
     db: Session,
     user_id: int,
@@ -441,31 +517,153 @@ def upsert_monthly_budget(
     year_month: str,
     amount_limit: float,
     bank_account_id: int | None = None,
+    other_detail: str | None = None,
 ) -> models.MonthlyBudget:
+    cat = category_name.strip()
+    od: str | None = None
+    if cat.lower() == "other":
+        od = (other_detail or "").strip()[:120] or None
     q = db.query(models.MonthlyBudget).filter(
         models.MonthlyBudget.user_id == user_id,
-        models.MonthlyBudget.category_name == category_name,
+        models.MonthlyBudget.category_name == cat,
         models.MonthlyBudget.year_month == year_month,
     )
     if bank_account_id is None:
         q = q.filter(models.MonthlyBudget.bank_account_id.is_(None))
     else:
         q = q.filter(models.MonthlyBudget.bank_account_id == bank_account_id)
+    if od is not None:
+        q = q.filter(models.MonthlyBudget.other_detail == od)
+    else:
+        q = q.filter(models.MonthlyBudget.other_detail.is_(None))
     row = q.first()
     if row:
         row.amount_limit = float(amount_limit)
+        row.other_detail = od
     else:
         row = models.MonthlyBudget(
             user_id=user_id,
             bank_account_id=bank_account_id,
-            category_name=category_name,
+            category_name=cat,
             year_month=year_month,
             amount_limit=float(amount_limit),
+            other_detail=od,
         )
         db.add(row)
     db.commit()
     db.refresh(row)
     return row
+
+
+def delete_all_budgets_for_month_scope(
+    db: Session, *, user_id: int, year_month: str, bank_account_id: int | None
+) -> int:
+    """Remove all budget lines for this month and scope (account id or global)."""
+    q = db.query(models.MonthlyBudget).filter(
+        models.MonthlyBudget.user_id == user_id,
+        models.MonthlyBudget.year_month == year_month,
+    )
+    if bank_account_id is None:
+        q = q.filter(models.MonthlyBudget.bank_account_id.is_(None))
+    else:
+        q = q.filter(models.MonthlyBudget.bank_account_id == bank_account_id)
+    n = q.delete(synchronize_session=False)
+    db.commit()
+    return int(n or 0)
+
+
+def get_budget_commitment(
+    db: Session, user_id: int, year_month: str, scope_key: str
+) -> models.BudgetMonthCommitment | None:
+    return (
+        db.query(models.BudgetMonthCommitment)
+        .filter(
+            models.BudgetMonthCommitment.user_id == user_id,
+            models.BudgetMonthCommitment.year_month == year_month,
+            models.BudgetMonthCommitment.scope_key == scope_key,
+        )
+        .first()
+    )
+
+
+def upsert_budget_commitment(
+    db: Session,
+    *,
+    user_id: int,
+    year_month: str,
+    scope_key: str,
+    mode: str,
+    system_recommended_total: float | None,
+    committed_total: float | None,
+) -> models.BudgetMonthCommitment:
+    row = (
+        db.query(models.BudgetMonthCommitment)
+        .filter(
+            models.BudgetMonthCommitment.user_id == user_id,
+            models.BudgetMonthCommitment.year_month == year_month,
+            models.BudgetMonthCommitment.scope_key == scope_key,
+        )
+        .first()
+    )
+    now = datetime.utcnow()
+    if row:
+        row.mode = mode
+        row.system_recommended_total = system_recommended_total
+        row.committed_total = committed_total
+        row.committed_at = now
+    else:
+        row = models.BudgetMonthCommitment(
+            user_id=user_id,
+            year_month=year_month,
+            scope_key=scope_key,
+            mode=mode,
+            system_recommended_total=system_recommended_total,
+            committed_total=committed_total,
+            committed_at=now,
+        )
+        db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def ensure_legacy_budget_commitment(
+    db: Session, *, user_id: int, year_month: str, bank_account_id: int
+) -> None:
+    """If budget rows exist but no commitment row, record a legacy commitment (one-time migration per month)."""
+    scope_key = f"acc:{bank_account_id}"
+    if get_budget_commitment(db, user_id, year_month, scope_key):
+        return
+    rows = list_budgets_for_user(db, user_id, year_month, bank_account_id=bank_account_id)
+    if not rows:
+        return
+    committed_total = sum(float(r.amount_limit) for r in rows)
+    sys_tot: float | None = None
+    try:
+        from . import budget_503020
+
+        payload = budget_503020.build_default_month_budget(db, bank_account_id, year_month)
+        if payload:
+            sys_tot = float(payload["reference_total"])
+    except Exception:
+        sys_tot = None
+    upsert_budget_commitment(
+        db,
+        user_id=user_id,
+        year_month=year_month,
+        scope_key=scope_key,
+        mode="legacy",
+        system_recommended_total=sys_tot,
+        committed_total=committed_total,
+    )
+
+
+def is_month_budget_finalized(
+    db: Session, *, user_id: int, year_month: str, bank_account_id: int
+) -> bool:
+    """True only after explicit commit (or one-time DB backfill for pre-existing rows)."""
+    scope_key = f"acc:{bank_account_id}"
+    return get_budget_commitment(db, user_id, year_month, scope_key) is not None
 
 
 def delete_monthly_budget(db: Session, budget_id: int, user_id: int) -> bool:

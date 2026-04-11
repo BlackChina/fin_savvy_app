@@ -97,9 +97,26 @@ class MonthlyBudget(Base):
     category_name = Column(String(100), nullable=False)
     year_month = Column(String(7), nullable=False)  # YYYY-MM
     amount_limit = Column(Float, nullable=False)
+    other_detail = Column(String(120), nullable=True)  # when category_name is Other, user label (e.g. school fees)
 
     user = relationship("User", back_populates="monthly_budgets")
     bank_account = relationship("BankAccount")
+
+
+class BudgetMonthCommitment(Base):
+    """User has finalized a budget for this month/scope (system, customized, or scratch)."""
+
+    __tablename__ = "budget_month_commitment"
+    __table_args__ = (UniqueConstraint("user_id", "year_month", "scope_key", name="uq_budget_month_commitment"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    year_month = Column(String(7), nullable=False)
+    scope_key = Column(String(32), nullable=False)
+    mode = Column(String(24), nullable=False, default="unknown")  # system | customized | scratch
+    system_recommended_total = Column(Float, nullable=True)
+    committed_total = Column(Float, nullable=True)
+    committed_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
 
 class BudgetMonthProvenance(Base):

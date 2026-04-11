@@ -19,7 +19,51 @@ def init_db() -> None:
 
     Base.metadata.create_all(bind=engine)
     _ensure_schema_patches()
+    _backfill_budget_commitments()
     _seed_default_user()
+
+
+def _backfill_budget_commitments() -> None:
+    """Create legacy commitment rows for months that already had budget lines before commitments existed."""
+    try:
+        from . import crud, models
+    except Exception:
+        return
+    db = SessionLocal()
+    try:
+        pairs = (
+            db.query(
+                models.MonthlyBudget.user_id,
+                models.MonthlyBudget.year_month,
+                models.MonthlyBudget.bank_account_id,
+            )
+            .filter(models.MonthlyBudget.bank_account_id.isnot(None))
+            .distinct()
+            .all()
+        )
+        for uid, ym, bid in pairs:
+            if not ym or bid is None:
+                continue
+            sk = f"acc:{bid}"
+            if crud.get_budget_commitment(db, int(uid), str(ym), sk):
+                continue
+            rows = crud.list_budgets_for_user(db, int(uid), str(ym), bank_account_id=int(bid))
+            if not rows:
+                continue
+            tot = sum(float(r.amount_limit) for r in rows)
+            crud.upsert_budget_commitment(
+                db,
+                user_id=int(uid),
+                year_month=str(ym),
+                scope_key=sk,
+                mode="legacy",
+                system_recommended_total=None,
+                committed_total=float(tot),
+            )
+    except Exception:
+        pass
+    finally:
+        db.close()
 
 
 def _ensure_schema_patches() -> None:
@@ -47,6 +91,30 @@ def _ensure_schema_patches() -> None:
                             origin VARCHAR(32) NOT NULL DEFAULT 'unknown',
                             updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
                             CONSTRAINT uq_budget_month_provenance UNIQUE (user_id, year_month, scope_key)
+                        )
+                        """
+                    )
+                )
+        if "monthly_budgets" in tables:
+            mb_cols = {c["name"] for c in insp.get_columns("monthly_budgets")}
+            if "other_detail" not in mb_cols:
+                with engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE monthly_budgets ADD COLUMN other_detail VARCHAR(120)"))
+        if "budget_month_commitment" not in tables:
+            with engine.begin() as conn:
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE budget_month_commitment (
+                            id SERIAL PRIMARY KEY,
+                            user_id INTEGER NOT NULL REFERENCES users(id),
+                            year_month VARCHAR(7) NOT NULL,
+                            scope_key VARCHAR(32) NOT NULL,
+                            mode VARCHAR(24) NOT NULL DEFAULT 'unknown',
+                            system_recommended_total DOUBLE PRECISION,
+                            committed_total DOUBLE PRECISION,
+                            committed_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                            CONSTRAINT uq_budget_month_commitment UNIQUE (user_id, year_month, scope_key)
                         )
                         """
                     )

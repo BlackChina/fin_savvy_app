@@ -14,6 +14,9 @@ ORIGIN_LABELS: dict[str, str] = {
     "recommended_custom": "Hybrid (app + your edits)",
     "manual_only": "Custom only",
     "declined": "Declined app suggestion",
+    "system_503020": "FinSavvy 50/30/20 (accepted)",
+    "customized_503020": "FinSavvy 50/30/20 (customized)",
+    "scratch": "Custom budget (from scratch)",
     "unknown": "Not recorded",
 }
 

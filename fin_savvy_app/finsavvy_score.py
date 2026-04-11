@@ -14,7 +14,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from . import classifier, crud, models
+from . import budget_503020, classifier, crud, models
 
 
 LIFESTYLE_CATEGORIES = frozenset({"Dining", "Entertainment", "Alcohol & nightlife"})
@@ -242,7 +242,41 @@ def compute_month_score_payload(
         w_b, w_l, w_r = 0.0, 0.55, 0.45
         composite = w_l * lifestyle + w_r * receipt
 
-    total = round(max(0.0, min(100.0, composite)), 1)
+    total = max(0.0, min(100.0, composite))
+    scope_key = f"acc:{account_id}"
+    commitment = crud.get_budget_commitment(db, user_id, year_month, scope_key)
+    income_est: float | None = None
+    inc_payload = budget_503020.build_default_month_budget(db, account_id, year_month)
+    if inc_payload:
+        income_est = float(inc_payload["income_estimate"])
+
+    if commitment and has_budgets:
+        if commitment.mode == "system":
+            total = min(100.0, total + 1.0)
+        elif commitment.mode in ("scratch", "legacy", "customized") and income_est and income_est > 0:
+            pen = budget_503020.compliance_penalty_points(limits, income_est)
+            total = max(0.0, total - pen)
+        st = commitment.system_recommended_total
+        ct = commitment.committed_total
+        if (
+            commitment.mode in ("scratch", "legacy")
+            and st is not None
+            and ct is not None
+            and float(st) > 0
+        ):
+            dev = abs(float(ct) - float(st)) / float(st)
+            if dev > 0.25:
+                total = max(0.0, total - min(8.0, (dev - 0.25) * 25.0))
+        if (
+            st is not None
+            and ct is not None
+            and float(st) > 0
+            and float(ct) <= 0.85 * float(st)
+            and has_budgets
+        ):
+            total = min(100.0, total + 2.0)
+
+    total = round(max(0.0, min(100.0, total)), 1)
 
     transparency: list[dict[str, str]] = []
     if has_budgets:
@@ -287,6 +321,16 @@ def compute_month_score_payload(
     if not improvements:
         improvements.append("Keep tracking month to month; small consistent wins show up in this score over time.")
 
+    if commitment and has_budgets:
+        transparency.append(
+            {
+                "title": "Budget commitment mode",
+                "body": "Your score can reflect how you set this month’s limits: following the accepted 50/30/20 table "
+                "gives a small lift; fully custom budgets are checked against the same rule-of-thumb split of your "
+                "estimated income, and very different totals versus the app’s suggested envelope can reduce the headline score slightly.",
+            }
+        )
+
     return {
         "year_month": year_month,
         "period_start": start.isoformat(),
@@ -308,4 +352,13 @@ def compute_month_score_payload(
         "receipt_meta": receipt_meta,
         "transparency": transparency,
         "improvements": improvements,
+        "budget_commitment": (
+            {
+                "mode": commitment.mode,
+                "system_recommended_total": commitment.system_recommended_total,
+                "committed_total": commitment.committed_total,
+            }
+            if commitment
+            else None
+        ),
     }

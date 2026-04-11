@@ -24,7 +24,23 @@ from sqlalchemy import func
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from . import alerts, auth, budget_history, budget_recommendations, classifier, crud, csv_parser, finsavvy_score, insights, models, pdf_parser, receipt_ocr, schemas, tax_calc
+from . import (
+    alerts,
+    auth,
+    budget_recommendations,
+    budget_503020,
+    budget_validate,
+    classifier,
+    crud,
+    csv_parser,
+    finsavvy_score,
+    insights,
+    models,
+    pdf_parser,
+    receipt_ocr,
+    schemas,
+    tax_calc,
+)
 from .database import SessionLocal, init_db
 from .extract_finsavvy_html_assets import sync_poster_pngs_from_background_html
 
@@ -69,6 +85,20 @@ def _set_finsavvy_poster_cache_v() -> None:
 _set_finsavvy_poster_cache_v()
 if os.path.isdir(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+
+def _budget_baseline_session_key(user_id: int, year_month: str, account_id: int) -> str:
+    return f"finsavvy:503020_baseline:{user_id}:{year_month}:{account_id}"
+
+
+def _parse_limit_amount(raw: str) -> float | None:
+    s = (raw or "").strip().replace(" ", "").replace("R", "").replace("r", "").replace("$", "")
+    if not s:
+        return None
+    try:
+        return max(0.0, float(s.replace(",", "")))
+    except ValueError:
+        return None
 UPLOAD_RECEIPTS_DIR = os.path.join(BASE_DIR, "uploads", "receipts")
 UPLOAD_PAYSLIPS_DIR = os.path.join(BASE_DIR, "uploads", "payslips")
 
@@ -291,6 +321,17 @@ def dashboard(
     user = request.session.get("user")
     if not user or user_id is None:
         return RedirectResponse(url="/login", status_code=303)
+
+    if os.getenv("FINSAVVY_REQUIRE_MONTHLY_BUDGET", "").strip().lower() in ("1", "true", "yes"):
+        accounts_chk = crud.list_bank_accounts(db, user_id)
+        if accounts_chk:
+            acc_chk = account_id if crud.get_bank_account_for_user(db, account_id, user_id) else accounts_chk[0].id
+            ym_chk = f"{date.today().year}-{date.today().month:02d}"
+            if not crud.is_month_budget_finalized(db, user_id=user_id, year_month=ym_chk, bank_account_id=acc_chk):
+                return RedirectResponse(
+                    url=f"/budgets?account_id={acc_chk}&period={ym_chk}&budget_nag=1",
+                    status_code=303,
+                )
 
     # Prefer period from query string to avoid any param injection issues
     period = request.query_params.get("period") or period
@@ -1350,21 +1391,31 @@ def budgets_page(
                 "period": "",
                 "budgets": [],
                 "categories": classifier.get_all_category_names(),
+                "learned_categories": [],
                 "error": None,
-                "recommendation_rows": [],
-                "recommendation_income_avg": 0.0,
-                "recommendation_prior_months": [],
-                "hide_recommendations": False,
-                "customize_hint": False,
                 "period_choices": [],
                 "finsavvy_payload": None,
-                "budget_history_rows": [],
+                "default_503020": None,
+                "budget_finalized": False,
+                "customize_editing": False,
+                "scratch_editing": False,
+                "needs_budget_attention": False,
+                "budget_nag": False,
+                "history_years": [],
+                "history_months_for_year": [],
+                "selected_hist_year": None,
             },
         )
     if account_id is None:
         account_id = accounts[0].id
     if not crud.get_bank_account_for_user(db, account_id, user_id):
         account_id = accounts[0].id
+    hy = request.query_params.get("hist_year")
+    hm = request.query_params.get("hist_month")
+    if hy and hy.isdigit() and hm and hm.isdigit():
+        y_i, m_i = int(hy), int(hm)
+        if 1 <= m_i <= 12:
+            period = f"{y_i}-{m_i:02d}"
     period = request.query_params.get("period") or period
     latest = (
         db.query(func.max(models.Transaction.date))
@@ -1377,28 +1428,46 @@ def budgets_page(
     if not period:
         period = f"{date.today().year}-{date.today().month:02d}"
     budgets = crud.list_budgets_for_user(db, user_id, period, bank_account_id=account_id)
-
-    sess_hide_key = f"budgethide:{account_id}:{period}"
-    if request.query_params.get("clear_rec") == "1":
-        request.session.pop(sess_hide_key, None)
-    hide_recommendations = request.session.get(sess_hide_key) == "1"
-
-    rec_payload = budget_recommendations.compute_recommendations(db, account_id, period)
-    customize_hint = request.query_params.get("customize") == "1"
+    finalized = crud.is_month_budget_finalized(db, user_id=user_id, year_month=period, bank_account_id=account_id)
+    default_503020 = budget_503020.build_default_month_budget(db, account_id, period)
+    budget_mode = (request.query_params.get("budget_mode") or "").strip().lower()
+    if budget_mode == "customize" and default_503020 and not finalized:
+        request.session[_budget_baseline_session_key(user_id, period, account_id)] = json.dumps(
+            {"lines": [{"category": r["category"], "limit": float(r["limit"])} for r in default_503020["lines"]]}
+        )
+    customize_editing = bool(budget_mode == "customize" and default_503020 and not finalized)
+    scratch_editing = bool(budget_mode == "scratch" and not finalized)
+    today_ym = f"{date.today().year}-{date.today().month:02d}"
+    needs_budget_attention = (period == today_ym) and (not finalized)
+    budget_nag = request.query_params.get("budget_nag") == "1"
+    budget_error = request.session.pop("budget_error", None)
 
     budget_month_labels = crud.list_distinct_budget_months_for_user(db, user_id)
     avail_months = crud.get_available_months(db, account_id)
     avail_labels = [f"{y}-{m:02d}" for y, m in avail_months]
     period_choices = sorted(set(budget_month_labels) | set(avail_labels), reverse=True)[:40]
 
+    learned = crud.list_learned_category_labels(db, user_id, account_id)
+    generic = classifier.get_all_category_names()
+    categories_union = sorted(set(generic) | set(learned) | {"Other"})
+
     fs_payload = finsavvy_score.compute_month_score_payload(
         db, user_id=user_id, account_id=account_id, year_month=period
     )
 
-    hist_months = budget_history.list_history_months(db, user_id, account_id, 36)
-    budget_history_rows = budget_history.build_budget_history_rows(
-        db, user_id=user_id, account_id=account_id, months=hist_months
-    )
+    history_years = crud.list_distinct_budget_years_for_account(db, user_id, account_id)
+    selected_hist_year: int | None = None
+    history_months_for_year: list[int] = []
+    if hy and hy.isdigit():
+        selected_hist_year = int(hy)
+        history_months_for_year = crud.list_budget_months_numeric_for_year(
+            db, user_id, account_id, selected_hist_year
+        )
+    elif history_years:
+        selected_hist_year = history_years[0]
+        history_months_for_year = crud.list_budget_months_numeric_for_year(
+            db, user_id, account_id, selected_hist_year
+        )
 
     return templates.TemplateResponse(
         "budgets.html",
@@ -1409,16 +1478,20 @@ def budgets_page(
             "account_id": account_id,
             "period": period,
             "budgets": budgets,
-            "categories": classifier.get_all_category_names() + ["Other"],
-            "error": None,
-            "recommendation_rows": rec_payload["rows"],
-            "recommendation_income_avg": rec_payload["income_hint_avg"],
-            "recommendation_prior_months": rec_payload["prior_months_used"],
-            "hide_recommendations": hide_recommendations,
-            "customize_hint": customize_hint,
+            "categories": categories_union,
+            "learned_categories": learned,
+            "error": budget_error,
             "period_choices": period_choices,
             "finsavvy_payload": fs_payload,
-            "budget_history_rows": budget_history_rows,
+            "default_503020": default_503020,
+            "budget_finalized": finalized,
+            "customize_editing": customize_editing,
+            "scratch_editing": scratch_editing,
+            "needs_budget_attention": needs_budget_attention,
+            "budget_nag": budget_nag,
+            "history_years": history_years,
+            "history_months_for_year": history_months_for_year,
+            "selected_hist_year": selected_hist_year,
         },
     )
 
@@ -1515,8 +1588,9 @@ def budgets_save(
     account_id: int = Form(...),
     year_month: str = Form(...),
     category_name: str = Form(...),
-    amount_limit: float = Form(...),
+    amount_limit: str = Form(...),
     scope: str = Form("account"),
+    other_detail: str = Form(""),
     db: Session = Depends(get_db),
     user_id: int | None = Depends(get_current_user_id),
 ):
@@ -1527,13 +1601,23 @@ def budgets_save(
         return RedirectResponse(url="/budgets", status_code=303)
     bank_scope = None if scope == "all" else account_id
     ym = year_month.strip()
+    cat = category_name.strip()
+    amt = _parse_limit_amount(amount_limit)
+    if amt is None:
+        request.session["budget_error"] = "Enter a valid limit (numbers only; do not use currency symbols)."
+        return RedirectResponse(url=f"/budgets?account_id={account_id}&period={ym}", status_code=303)
+    od = (other_detail or "").strip()[:120] if cat.lower() == "other" else None
+    if cat.lower() == "other" and not od:
+        request.session["budget_error"] = 'For category "Other", add a short label (what this covers) so we can learn it for next month.'
+        return RedirectResponse(url=f"/budgets?account_id={account_id}&period={ym}", status_code=303)
     crud.upsert_monthly_budget(
         db,
         user_id=user_id,
-        category_name=category_name.strip(),
+        category_name=cat,
         year_month=ym,
-        amount_limit=max(0.0, amount_limit),
+        amount_limit=amt,
         bank_account_id=bank_scope,
+        other_detail=od,
     )
     sk = "global" if bank_scope is None else f"acc:{account_id}"
     crud.note_manual_budget_change(db, user_id, ym, sk)
@@ -1554,6 +1638,196 @@ def budgets_delete(
         return RedirectResponse(url="/login", status_code=303)
     crud.delete_monthly_budget(db, budget_id, user_id)
     return RedirectResponse(url=f"/budgets?account_id={account_id}&period={period}", status_code=303)
+
+
+@app.post("/budgets/commit-system", response_model=None, response_class=HTMLResponse)
+def budgets_commit_system(
+    request: Request,
+    account_id: int = Form(...),
+    year_month: str = Form(...),
+    db: Session = Depends(get_db),
+    user_id: int | None = Depends(get_current_user_id),
+):
+    user = request.session.get("user")
+    if not user or user_id is None:
+        return RedirectResponse(url="/login", status_code=303)
+    if not crud.get_bank_account_for_user(db, account_id, user_id):
+        return RedirectResponse(url="/budgets", status_code=303)
+    ym = year_month.strip()
+    payload = budget_503020.build_default_month_budget(db, account_id, ym)
+    if not payload or not payload.get("lines"):
+        request.session["budget_error"] = "Not enough statement history to build the recommended budget. Upload more months or use custom budget from scratch."
+        return RedirectResponse(url=f"/budgets?account_id={account_id}&period={ym}", status_code=303)
+    sk = f"acc:{account_id}"
+    crud.delete_all_budgets_for_month_scope(db, user_id=user_id, year_month=ym, bank_account_id=account_id)
+    ref = float(payload["reference_total"])
+    for row in payload["lines"]:
+        crud.upsert_monthly_budget(
+            db,
+            user_id=user_id,
+            category_name=str(row["category"]),
+            year_month=ym,
+            amount_limit=float(row["limit"]),
+            bank_account_id=account_id,
+            other_detail=None,
+        )
+    crud.upsert_budget_provenance(db, user_id, ym, sk, "system_503020")
+    crud.upsert_budget_commitment(
+        db,
+        user_id=user_id,
+        year_month=ym,
+        scope_key=sk,
+        mode="system",
+        system_recommended_total=ref,
+        committed_total=ref,
+    )
+    request.session.pop(_budget_baseline_session_key(user_id, ym, account_id), None)
+    return RedirectResponse(url=f"/budgets?account_id={account_id}&period={ym}", status_code=303)
+
+
+@app.post("/budgets/commit-customized", response_model=None, response_class=HTMLResponse)
+async def budgets_commit_customized(
+    request: Request,
+    account_id: int = Form(...),
+    year_month: str = Form(...),
+    db: Session = Depends(get_db),
+    user_id: int | None = Depends(get_current_user_id),
+):
+    user = request.session.get("user")
+    if not user or user_id is None:
+        return RedirectResponse(url="/login", status_code=303)
+    if not crud.get_bank_account_for_user(db, account_id, user_id):
+        return RedirectResponse(url="/budgets", status_code=303)
+    ym = year_month.strip()
+    sk = f"acc:{account_id}"
+    key = _budget_baseline_session_key(user_id, ym, account_id)
+    raw = request.session.get(key)
+    if not raw:
+        request.session["budget_error"] = "Customization session expired. Open Customize again, then save."
+        return RedirectResponse(url=f"/budgets?account_id={account_id}&period={ym}", status_code=303)
+    try:
+        baseline_obj = json.loads(raw)
+        baseline_lines = baseline_obj["lines"]
+    except (json.JSONDecodeError, KeyError, TypeError):
+        request.session["budget_error"] = "Could not read customization baseline. Try Customize again."
+        return RedirectResponse(url=f"/budgets?account_id={account_id}&period={ym}", status_code=303)
+    form = await request.form()
+    cats = form.getlist("line_category")
+    lims = form.getlist("line_limit")
+    if len(cats) != len(lims) or len(cats) != len(baseline_lines):
+        request.session["budget_error"] = "Budget form was incomplete — try Customize again."
+        return RedirectResponse(url=f"/budgets?account_id={account_id}&period={ym}&budget_mode=customize", status_code=303)
+    submitted: list[dict[str, object]] = []
+    for c, lim_raw in zip(cats, lims):
+        lim = _parse_limit_amount(str(lim_raw))
+        if lim is None:
+            request.session["budget_error"] = "Each line needs a valid limit (numbers only; no currency symbols)."
+            return RedirectResponse(url=f"/budgets?account_id={account_id}&period={ym}&budget_mode=customize", status_code=303)
+        submitted.append({"category": str(c).strip(), "limit": float(lim)})
+    err = budget_validate.validate_customized_503020(baseline_lines, submitted)
+    if err:
+        request.session["budget_error"] = err
+        return RedirectResponse(url=f"/budgets?account_id={account_id}&period={ym}&budget_mode=customize", status_code=303)
+    base_total = sum(float(r["limit"]) for r in baseline_lines)
+    crud.delete_all_budgets_for_month_scope(db, user_id=user_id, year_month=ym, bank_account_id=account_id)
+    new_total = 0.0
+    for row in submitted:
+        crud.upsert_monthly_budget(
+            db,
+            user_id=user_id,
+            category_name=str(row["category"]),
+            year_month=ym,
+            amount_limit=float(row["limit"]),
+            bank_account_id=account_id,
+            other_detail=None,
+        )
+        new_total += float(row["limit"])
+    crud.upsert_budget_provenance(db, user_id, ym, sk, "customized_503020")
+    crud.upsert_budget_commitment(
+        db,
+        user_id=user_id,
+        year_month=ym,
+        scope_key=sk,
+        mode="customized",
+        system_recommended_total=float(base_total),
+        committed_total=float(new_total),
+    )
+    request.session.pop(key, None)
+    return RedirectResponse(url=f"/budgets?account_id={account_id}&period={ym}", status_code=303)
+
+
+@app.post("/budgets/commit-scratch", response_model=None, response_class=HTMLResponse)
+async def budgets_commit_scratch(
+    request: Request,
+    account_id: int = Form(...),
+    year_month: str = Form(...),
+    db: Session = Depends(get_db),
+    user_id: int | None = Depends(get_current_user_id),
+):
+    user = request.session.get("user")
+    if not user or user_id is None:
+        return RedirectResponse(url="/login", status_code=303)
+    if not crud.get_bank_account_for_user(db, account_id, user_id):
+        return RedirectResponse(url="/budgets", status_code=303)
+    ym = year_month.strip()
+    sk = f"acc:{account_id}"
+    form = await request.form()
+    cats = form.getlist("scratch_cat")
+    lims = form.getlist("scratch_limit")
+    others = form.getlist("scratch_other")
+    rows_out: list[tuple[str, float, str | None]] = []
+    for i, c in enumerate(cats):
+        cat = str(c).strip()
+        if not cat:
+            continue
+        lim_raw = lims[i] if i < len(lims) else ""
+        lim = _parse_limit_amount(str(lim_raw))
+        if lim is None or lim <= 0:
+            continue
+        od: str | None = None
+        if cat.lower() == "other":
+            od_raw = others[i] if i < len(others) else ""
+            od = (str(od_raw).strip())[:120] or None
+            if not od:
+                request.session["budget_error"] = 'Each "Other" line needs a label (what it covers).'
+                return RedirectResponse(
+                    url=f"/budgets?account_id={account_id}&period={ym}&budget_mode=scratch",
+                    status_code=303,
+                )
+        rows_out.append((cat, float(lim), od))
+    if not rows_out:
+        request.session["budget_error"] = "Add at least one category with a positive limit."
+        return RedirectResponse(
+            url=f"/budgets?account_id={account_id}&period={ym}&budget_mode=scratch",
+            status_code=303,
+        )
+    sys_payload = budget_503020.build_default_month_budget(db, account_id, ym)
+    sys_ref = float(sys_payload["reference_total"]) if sys_payload else None
+    crud.delete_all_budgets_for_month_scope(db, user_id=user_id, year_month=ym, bank_account_id=account_id)
+    total = 0.0
+    for cat, lim, od in rows_out:
+        crud.upsert_monthly_budget(
+            db,
+            user_id=user_id,
+            category_name=cat,
+            year_month=ym,
+            amount_limit=lim,
+            bank_account_id=account_id,
+            other_detail=od,
+        )
+        total += lim
+    crud.upsert_budget_provenance(db, user_id, ym, sk, "scratch")
+    crud.upsert_budget_commitment(
+        db,
+        user_id=user_id,
+        year_month=ym,
+        scope_key=sk,
+        mode="scratch",
+        system_recommended_total=sys_ref,
+        committed_total=float(total),
+    )
+    request.session.pop(_budget_baseline_session_key(user_id, ym, account_id), None)
+    return RedirectResponse(url=f"/budgets?account_id={account_id}&period={ym}", status_code=303)
 
 
 @app.get("/settings", response_class=HTMLResponse)
