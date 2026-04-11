@@ -63,6 +63,38 @@ def _aggregate_expense_by_category(
     return out
 
 
+def _budget_compliance_rows_from_db(
+    db: Session,
+    user_id: int,
+    account_id: int,
+    year_month: str,
+) -> list[tuple[float, str]]:
+    """(limit, bucket) per budget row, using stored budget_bucket when set (sums all lines, not merged by name)."""
+
+    def _row_tuple(b: models.MonthlyBudget) -> tuple[float, str]:
+        lim = float(b.amount_limit)
+        raw_bb = getattr(b, "budget_bucket", None)
+        bb = raw_bb.strip().lower() if isinstance(raw_bb, str) and raw_bb.strip() else None
+        bfk = bb if bb in ("needs", "wants", "savings") else None
+        if not bfk:
+            bfk = budget_503020.budget_bucket_for_category(b.category_name)
+        return lim, bfk
+
+    rows = crud.list_budgets_for_user(db, user_id, year_month, bank_account_id=account_id)
+    acc_keys: set[tuple[str, str | None]] = set()
+    out: list[tuple[float, str]] = []
+    for b in rows:
+        if b.bank_account_id == account_id:
+            acc_keys.add((b.category_name, b.other_detail))
+            if float(b.amount_limit) > 0:
+                out.append(_row_tuple(b))
+    for b in rows:
+        if b.bank_account_id is None and (b.category_name, b.other_detail) not in acc_keys:
+            if float(b.amount_limit) > 0:
+                out.append(_row_tuple(b))
+    return out
+
+
 def _budget_map_for_account(
     db: Session,
     user_id: int,
@@ -257,7 +289,8 @@ def compute_month_score_payload(
         if commitment.mode == "system":
             total = min(100.0, total + 1.0)
         elif commitment.mode in ("scratch", "legacy", "customized") and income_est and income_est > 0:
-            pen = budget_503020.compliance_penalty_points(limits, income_est)
+            comp_rows = _budget_compliance_rows_from_db(db, user_id, account_id, year_month)
+            pen = budget_503020.compliance_penalty_from_limit_bucket_rows(comp_rows, income_est)
             total = max(0.0, total - pen)
         st = commitment.system_recommended_total
         ct = commitment.committed_total

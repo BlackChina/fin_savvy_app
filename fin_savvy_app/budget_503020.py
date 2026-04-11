@@ -59,33 +59,57 @@ def budget_bucket_for_category(name: str) -> str:
     return _bucket_for_category(name)
 
 
-def compliance_penalty_points(
-    limits_by_category: dict[str, float],
+def _compliance_penalty_from_bucket_totals(
+    buckets: dict[str, float],
+    total_lim: float,
     income_estimate: float,
 ) -> float:
-    """
-    Points to subtract from the composite score (0–15) when committed limits do not follow 50/30/20
-    shares of income (for scratch / legacy / customized paths).
-    """
     if income_estimate is None or float(income_estimate) <= 0:
         return 0.0
-    total_lim = sum(max(0.0, float(v)) for v in limits_by_category.values())
     if total_lim <= 0:
         return 0.0
-    buckets = {"needs": 0.0, "wants": 0.0, "savings": 0.0}
-    for cat, lim in limits_by_category.items():
-        if lim <= 0:
-            continue
-        buckets[budget_bucket_for_category(cat)] += float(lim)
-    # Compare share of total limits to target 50/30/20
     targets = (0.50, 0.30, 0.20)
     keys = ("needs", "wants", "savings")
     dev = 0.0
     for k, t in zip(keys, targets):
         share = buckets[k] / total_lim
         dev += abs(share - t)
-    # dev in [0, ~2]; map to penalty
     return float(min(15.0, dev * 35.0))
+
+
+def compliance_penalty_points(
+    limits_by_category: dict[str, float],
+    income_estimate: float,
+) -> float:
+    """
+    Points to subtract from the composite score (0–15) when committed limits do not follow 50/30/20
+    shares of income (for scratch / legacy / customized paths). Infers bucket from category names.
+    """
+    buckets = {"needs": 0.0, "wants": 0.0, "savings": 0.0}
+    for cat, lim in limits_by_category.items():
+        if lim <= 0:
+            continue
+        buckets[budget_bucket_for_category(cat)] += float(lim)
+    total_lim = sum(buckets.values())
+    return _compliance_penalty_from_bucket_totals(buckets, total_lim, income_estimate)
+
+
+def compliance_penalty_from_limit_bucket_rows(
+    rows: list[tuple[float, str]],
+    income_estimate: float,
+) -> float:
+    """Same as compliance_penalty_points but each row is (limit, bucket) with bucket needs|wants|savings."""
+    buckets = {"needs": 0.0, "wants": 0.0, "savings": 0.0}
+    for lim, b in rows:
+        lim = float(lim)
+        if lim <= 0:
+            continue
+        bk = (b or "").strip().lower()
+        if bk not in buckets:
+            bk = "wants"
+        buckets[bk] += lim
+    total_lim = sum(buckets.values())
+    return _compliance_penalty_from_bucket_totals(buckets, total_lim, income_estimate)
 
 
 

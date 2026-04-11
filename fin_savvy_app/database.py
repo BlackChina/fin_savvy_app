@@ -103,6 +103,9 @@ def _ensure_schema_patches() -> None:
             if "other_detail" not in mb_cols:
                 with engine.begin() as conn:
                     conn.execute(text("ALTER TABLE monthly_budgets ADD COLUMN other_detail VARCHAR(120)"))
+            if "budget_bucket" not in mb_cols:
+                with engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE monthly_budgets ADD COLUMN budget_bucket VARCHAR(16)"))
         if "budget_month_commitment" not in tables:
             with engine.begin() as conn:
                 conn.execute(

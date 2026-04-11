@@ -161,14 +161,18 @@ def apply_recommendations(
     from . import crud
 
     n = 0
+    from . import budget_503020
+
     for row in payload["rows"]:
+        cname = row["category_name"]
         crud.upsert_monthly_budget(
             db,
             user_id=user_id,
-            category_name=row["category_name"],
+            category_name=cname,
             year_month=year_month,
             amount_limit=float(row["recommended_limit"]),
             bank_account_id=bank_account_id,
+            budget_bucket=budget_503020.budget_bucket_for_category(cname),
         )
         n += 1
     return n

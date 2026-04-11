@@ -98,6 +98,7 @@ class MonthlyBudget(Base):
     year_month = Column(String(7), nullable=False)  # YYYY-MM
     amount_limit = Column(Float, nullable=False)
     other_detail = Column(String(120), nullable=True)  # when category_name is Other, user label (e.g. school fees)
+    budget_bucket = Column(String(16), nullable=True)  # needs | wants | savings — user or system 50/30/20 split
 
     user = relationship("User", back_populates="monthly_budgets")
     bank_account = relationship("BankAccount")

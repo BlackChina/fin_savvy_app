@@ -521,6 +521,15 @@ def list_budgets_for_user(
     return q.order_by(models.MonthlyBudget.category_name).all()
 
 
+def normalize_budget_bucket(raw: str | None) -> str | None:
+    if not raw:
+        return None
+    s = str(raw).strip().lower()
+    if s in ("needs", "wants", "savings"):
+        return s
+    return None
+
+
 def upsert_monthly_budget(
     db: Session,
     *,
@@ -530,11 +539,13 @@ def upsert_monthly_budget(
     amount_limit: float,
     bank_account_id: int | None = None,
     other_detail: str | None = None,
+    budget_bucket: str | None = None,
 ) -> models.MonthlyBudget:
     cat = category_name.strip()
     od: str | None = None
     if cat.lower() == "other":
         od = (other_detail or "").strip()[:120] or None
+    bb = normalize_budget_bucket(budget_bucket)
     q = db.query(models.MonthlyBudget).filter(
         models.MonthlyBudget.user_id == user_id,
         models.MonthlyBudget.category_name == cat,
@@ -552,6 +563,7 @@ def upsert_monthly_budget(
     if row:
         row.amount_limit = float(amount_limit)
         row.other_detail = od
+        row.budget_bucket = bb
     else:
         row = models.MonthlyBudget(
             user_id=user_id,
@@ -560,6 +572,7 @@ def upsert_monthly_budget(
             year_month=year_month,
             amount_limit=float(amount_limit),
             other_detail=od,
+            budget_bucket=bb,
         )
         db.add(row)
     db.commit()
