@@ -50,6 +50,9 @@ def _backfill_budget_commitments() -> None:
             rows = crud.list_budgets_for_user(db, int(uid), str(ym), bank_account_id=int(bid))
             if not rows:
                 continue
+            prov = crud.get_budget_provenance(db, int(uid), str(ym), sk)
+            if len(rows) < 2 and (prov is None or prov == "unknown"):
+                continue
             tot = sum(float(r.amount_limit) for r in rows)
             crud.upsert_budget_commitment(
                 db,

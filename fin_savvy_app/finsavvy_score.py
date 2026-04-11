@@ -181,8 +181,11 @@ def _lifestyle_score(
 def _receipt_score(cash: float, receipts: float) -> tuple[float, dict[str, Any]]:
     meta: dict[str, Any] = {"cash_withdrawn": cash, "receipts_total": receipts, "coverage_pct": None}
     if cash <= 0:
-        meta["note"] = "No ATM cash withdrawals flagged this month — full marks for this part."
-        return 100.0, meta
+        meta["note"] = (
+            "No ATM-style cash withdrawals recorded this month — this pillar scores neutrally until you "
+            "withdraw cash and upload receipts to show coverage."
+        )
+        return 76.0, meta
     ratio = receipts / cash
     meta["coverage_pct"] = round(min(100.0, ratio * 100.0), 1)
     # 85%+ receipt value vs cash = full score; scale linearly below.
@@ -307,7 +310,8 @@ def compute_month_score_payload(
         {
             "title": f"Cash & receipts ({int(round(w_r * 100))}% of your score)",
             "body": "ATM-style withdrawals flagged on statements are compared to receipt amounts you uploaded for the same calendar month. "
-            "Full marks when receipt total is at least 85% of withdrawals; lower coverage reduces this part of the score.",
+            "Strong scores when receipts cover at least 85% of withdrawals; lower coverage reduces this part. "
+            "If there were no cash withdrawals this month, this pillar stays in a neutral band until you have cash activity to measure.",
         }
     )
 

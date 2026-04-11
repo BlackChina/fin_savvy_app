@@ -21,8 +21,17 @@ th,td{padding:.5rem;text-align:left;border-bottom:1px solid #1f2937}
 .btn-secondary{padding:.5rem .85rem;border-radius:.5rem;background:#0f172a;color:#e2e8f0;border:1px solid #334155;text-decoration:none;display:inline-block}
 .btn-ghost{padding:.5rem .85rem;border-radius:.5rem;background:transparent;color:#94a3b8;border:1px solid #475569;text-decoration:none;display:inline-block}
 .err-banner{border:1px solid #991b1b;background:rgba(127,29,29,.2);color:#fecaca;padding:.75rem 1rem;border-radius:.5rem;margin-bottom:1rem;font-size:.88rem}
-.nag-banner{border:1px solid #ca8a04;background:rgba(113,63,18,.25);color:#fde68a;padding:.75rem 1rem;border-radius:.5rem;margin-bottom:1rem;font-size:.88rem}
+.banner-nudge{display:flex;gap:0;align-items:stretch;border-radius:.75rem;border:1px solid rgba(251,191,36,.22);background:linear-gradient(145deg,rgba(15,23,42,.98),rgba(30,27,75,.55));box-shadow:0 8px 32px rgba(0,0,0,.4);overflow:hidden;margin-bottom:1.25rem}
+.banner-nudge__accent{width:5px;flex-shrink:0;background:linear-gradient(180deg,#fde68a,#f59e0b,#b45309)}
+.banner-nudge__body{padding:1.1rem 1.35rem 1.15rem 1.25rem;flex:1}
+.banner-nudge__title{margin:0 0 .4rem;font-size:.68rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#a5b4fc}
+.banner-nudge__text{margin:0;font-size:.93rem;line-height:1.6;color:#e2e8f0;font-weight:450}
+.banner-nudge__text strong{color:#fde68a;font-weight:600}
 .ok-banner{border:1px solid #166534;background:rgba(22,101,52,.15);color:#86efac;padding:.75rem 1rem;border-radius:.5rem;margin-bottom:1rem;font-size:.88rem}
+.card--readonly-banner{border-color:#475569;background:linear-gradient(180deg,#1e293b,#0f172a);color:#e2e8f0}
+.card--readonly-banner p{margin:0;font-size:.92rem;line-height:1.55;color:#e2e8f0}
+.card--readonly-banner strong{color:#f8fafc}
+.col-other{font-size:.72rem;color:#64748b;font-weight:500}
 .fs-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:1rem;margin-bottom:1rem}
 .fs-score{font-size:2.75rem;font-weight:800;letter-spacing:-.03em;background:linear-gradient(135deg,#38bdf8,#22c55e);-webkit-background-clip:text;background-clip:text;color:transparent}
 .fs-grade{font-size:1.25rem;color:#94a3b8;font-weight:600}
@@ -65,7 +74,12 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
 <div class="card"><p>Add an account on <a href="/upload" style="color:#38bdf8">Upload</a>.</p></div>
 {% else %}
 {% if budget_nag or needs_budget_attention %}
-<div class="nag-banner">{% if budget_nag %}Other areas of the app are limited until{% else %}Reminder:{% endif %} you <strong>finalize a budget</strong> for <strong>{{ period }}</strong> on this account — accept the suggested 50/30/20 plan, customize it within the rules, or build your own and press <strong>Create budget</strong>.</div>
+<div class="banner-nudge" role="status">
+<div class="banner-nudge__accent" aria-hidden="true"></div>
+<div class="banner-nudge__body">
+<p class="banner-nudge__title">{% if budget_nag %}Action required{% else %}FinSavvy{% endif %}</p>
+<p class="banner-nudge__text">{% if budget_nag %}Some areas stay paused until you{% else %}To unlock the full score model, please{% endif %} <strong>finalize a budget</strong> for <strong>{{ period }}</strong> on this account: accept the suggested 50/30/20 envelope, adjust it within the rules, or build your own plan and press <strong>Create budget</strong>.</p>
+</div></div>
 {% endif %}
 {% if error %}<div class="err-banner">{{ error }}</div>{% endif %}
 
@@ -86,21 +100,27 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
 {% if not view_only_month and not budget_finalized and scratch_editing %}
 <div class="card" id="scratch-budget">
 <h2>Custom budget from scratch</h2>
-<p class="hint" style="margin-top:0">Add one or more lines. <strong>Limit</strong>: type numbers only (no R or other symbols). Categories include common defaults plus labels we have seen on your statements. For <strong>Other</strong>, describe what it covers so we can suggest it again later.</p>
+<p class="hint" style="margin-top:0">Add lines below. <strong>Limit</strong>: numbers only (no currency symbols). Pick a category from the list; if you choose <strong>Other</strong>, type your own label for that line.</p>
 <form method="post" action="/budgets/commit-scratch">
 <input type="hidden" name="account_id" value="{{ account_id }}"/>
 <input type="hidden" name="year_month" value="{{ period }}"/>
-<table><thead><tr><th>Category</th><th>Limit</th><th>If Other, describe</th></tr></thead><tbody>
-{% for _ in [1,2,3,4,5,6,7,8,9,10,11,12] %}
+<table><thead><tr><th>Category</th><th>Limit</th><th class="col-other">If you chose Other</th></tr></thead><tbody>
+{% for _ in [1,2,3,4,5,6,7,8,9,10,11,12,13,14] %}
 <tr>
-<td><select name="scratch_cat" class="scratch-row" style="margin-bottom:0">{% for c in categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}</select></td>
+<td><select name="scratch_cat" data-budget-cat class="scratch-row" style="margin-bottom:0">
+<option value="">—</option>
+{% for c in categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+</select></td>
 <td><input type="text" name="scratch_limit" inputmode="decimal" placeholder="0" style="margin-bottom:0"/></td>
-<td><input type="text" name="scratch_other" placeholder="Required only for Other" style="margin-bottom:0"/></td>
+<td data-budget-other-wrap style="display:none"><input type="text" name="scratch_other" data-budget-other-input placeholder="e.g. School fees" style="margin-bottom:0"/></td>
 </tr>
 {% endfor %}
 </tbody></table>
-<p class="hint" style="font-size:.8rem">Empty rows are ignored. You can return to the suggested plan <a href="/budgets?account_id={{ account_id }}&amp;period={{ period }}" style="color:#38bdf8">without scratch mode</a>.</p>
+<p class="hint" style="font-size:.8rem">Empty rows are ignored.</p>
+<div class="budget-actions">
 <button type="submit">Create budget</button>
+<a class="btn-ghost" href="/budgets?account_id={{ account_id }}&amp;period={{ period }}">Cancel</a>
+</div>
 </form>
 </div>
 {% elif not view_only_month and not budget_finalized and default_503020 %}
@@ -112,16 +132,21 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
 <form method="post" action="/budgets/commit-customized">
 <input type="hidden" name="account_id" value="{{ account_id }}"/>
 <input type="hidden" name="year_month" value="{{ period }}"/>
-<table><thead><tr><th>Bucket</th><th>Category</th><th>Limit (R)</th></tr></thead><tbody>
-{% for line in default_503020.lines %}<tr>
-<td class="{% if line.bucket == 'needs' %}bucket-needs{% elif line.bucket == 'wants' %}bucket-wants{% else %}bucket-savings{% endif %}">{{ line.bucket }}</td>
-<td><input type="hidden" name="line_category" value="{{ line.category }}"/>{{ line.category }}</td>
-<td><input type="text" name="line_limit" value="{{ line.limit }}" inputmode="decimal" style="margin-bottom:0"/></td>
-</tr>{% endfor %}</tbody></table>
-<p class="hint" style="font-size:.8rem">You may change at most ~40% of the lines and keep the total within ±25% of the suggested total. Limits: numbers only (no currency symbols).</p>
+<table><thead><tr><th>Bucket (hint)</th><th>Category</th><th>Limit</th><th class="col-other">If Other</th></tr></thead><tbody>
+{% for row in customize_seed_rows %}<tr>
+<td class="{% if row.bucket == 'needs' %}bucket-needs{% elif row.bucket == 'wants' %}bucket-wants{% elif row.bucket == 'savings' %}bucket-savings{% else %}hint{% endif %}" style="font-size:.82rem">{% if row.bucket %}{{ row.bucket }}{% else %}—{% endif %}</td>
+<td><select name="line_category" data-budget-cat style="margin-bottom:0">
+<option value="" {% if not row.category %}selected{% endif %}>—</option>
+{% for c in categories %}<option value="{{ c }}" {% if row.category == c %}selected{% endif %}>{{ c }}</option>{% endfor %}
+</select></td>
+<td><input type="text" name="line_limit" value="{% if row.limit %}{{ row.limit }}{% endif %}" inputmode="decimal" placeholder="0" style="margin-bottom:0"/></td>
+<td data-budget-other-wrap style="display:none"><input type="text" name="line_other" data-budget-other-input placeholder="Custom label" style="margin-bottom:0"/></td>
+</tr>{% endfor %}
+</tbody></table>
+<p class="hint" style="font-size:.8rem">Change categories, limits, or add rows — at most ~40% of the original suggested lines may change, and the total must stay within ±25% of the suggested total. Numbers only in limits.</p>
 <div class="budget-actions">
 <button type="submit">Create budget (customized)</button>
-<a class="btn-ghost" href="/budgets?account_id={{ account_id }}&amp;period={{ period }}">Cancel editing</a>
+<a class="btn-ghost" href="/budgets?account_id={{ account_id }}&amp;period={{ period }}">Cancel</a>
 </div>
 </form>
 {% else %}
@@ -157,31 +182,18 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
 
 {% if budget_finalized %}
 {% if view_only_month %}
-<div class="card" style="border-color:#334155;background:rgba(15,23,42,.4)">
-<p class="hint" style="margin:0"><strong>Read-only month.</strong> You are viewing <strong>{{ period }}</strong>. Compare the FinSavvy reference envelope to the budget you committed, then see the score and budget vs actual.</p>
+<div class="card card--readonly-banner">
+<p><strong>Read-only month.</strong> You are viewing <strong>{{ period }}</strong>. Below is the budget on record for that month and how your spending compared; the FinSavvy score summarises the same period.</p>
 </div>
 {% else %}
 <div class="ok-banner">Budget finalized for <strong>{{ period }}</strong>. You can add or adjust lines below; large changes may affect your FinSavvy score.</div>
 {% endif %}
 
-{% if view_only_month and default_503020 %}
-<div class="card" id="reference-503020">
-<h2>FinSavvy reference budget (50 / 30 / 20) — {{ period }}</h2>
-<p class="hint" style="margin-top:0">Built from your statements <em>before</em> this month: the envelope the app would have suggested for <strong>{{ period }}</strong> (for comparison with what you committed).</p>
-<p class="hint" style="font-size:.82rem">Pools: Needs <span class="bucket-needs">R {{ default_503020.needs_pool | format_currency }}</span> · Wants <span class="bucket-wants">R {{ default_503020.wants_pool | format_currency }}</span> · Savings &amp; investments <span class="bucket-savings">R {{ default_503020.savings_pool | format_currency }}</span> · Reference total <strong>R {{ default_503020.reference_total | format_currency }}</strong></p>
-<table><thead><tr><th>Bucket</th><th>Category</th><th>Limit (R)</th></tr></thead><tbody>
-{% for line in default_503020.lines %}<tr>
-<td class="{% if line.bucket == 'needs' %}bucket-needs{% elif line.bucket == 'wants' %}bucket-wants{% else %}bucket-savings{% endif %}">{{ line.bucket }}</td>
-<td>{{ line.category }}</td>
-<td>{{ line.limit | format_currency }}</td>
-</tr>{% endfor %}</tbody></table>
-</div>
-{% elif view_only_month and not default_503020 %}
-<div class="card"><p class="hint" style="margin:0">Not enough imported history to reconstruct the FinSavvy 50/30/20 reference for <strong>{{ period }}</strong>. Your committed lines and score below still apply.</p></div>
-{% endif %}
-
 <div class="card" id="saved-budgets">
-<h2>{% if view_only_month %}Your committed budget{% else %}Saved limits{% endif %} — {{ period }}</h2>
+<h2>{% if budget_commitment_info and budget_commitment_info.mode == 'legacy' %}Saved budget lines{% elif view_only_month %}Your committed budget{% else %}Saved limits{% endif %} — {{ period }}</h2>
+{% if budget_commitment_info and budget_commitment_info.mode == 'legacy' %}
+<p class="hint" style="margin-top:0">These rows were saved before the formal “finalize budget” step; they are treated as your plan for this month.</p>
+{% endif %}
 {% if budgets %}
 <table><thead><tr><th>Category</th><th>Detail</th><th>Scope</th><th>Limit</th>{% if not view_only_month %}<th></th>{% endif %}</tr></thead><tbody>
 {% for b in budgets %}<tr>
@@ -195,6 +207,9 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
 <button type="submit" style="background:#7f1d1d;color:#fecaca;border:none;padding:.25rem .5rem;border-radius:.35rem;cursor:pointer;font-size:.8rem">Remove</button>
 </form></td>{% endif %}</tr>{% endfor %}</tbody></table>
 {% else %}<p style="color:#9ca3af">No rows stored (unexpected after finalize).</p>{% endif %}
+{% if budgets %}
+<p class="hint" style="font-size:.78rem;margin-top:.65rem;margin-bottom:0"><strong>Scope:</strong> <em>Account</em> = this limit applies only to this bank account. <em>All</em> = applies across all your accounts unless a per-account line overrides it for a category.</p>
+{% endif %}
 </div>
 {% if not view_only_month %}
 <div class="card" id="custom-budget">
@@ -294,4 +309,25 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
 </div>
 
 {% endif %}
+<script>
+(function(){
+  function syncOtherCell(sel){
+    var row = sel.closest("tr");
+    if (!row) return;
+    var wrap = row.querySelector("[data-budget-other-wrap]");
+    var inp = row.querySelector("[data-budget-other-input]");
+    if (!wrap) return;
+    var on = (sel.value || "").toLowerCase() === "other";
+    wrap.style.display = on ? "table-cell" : "none";
+    if (inp && !on) inp.value = "";
+  }
+  function bind(root){
+    root.querySelectorAll("select[data-budget-cat]").forEach(function(sel){
+      sel.addEventListener("change", function(){ syncOtherCell(sel); });
+      syncOtherCell(sel);
+    });
+  }
+  bind(document);
+})();
+</script>
 </main></body></html>

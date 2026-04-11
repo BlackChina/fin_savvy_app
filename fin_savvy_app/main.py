@@ -1445,6 +1445,8 @@ def budgets_page(
                 "selected_hist_month": None,
                 "view_only_month": False,
                 "current_period_ym": f"{date.today().year}-{date.today().month:02d}",
+                "customize_seed_rows": [],
+                "budget_commitment_info": None,
             },
         )
     if account_id is None:
@@ -1503,6 +1505,22 @@ def budgets_page(
         db, user_id=user_id, account_id=account_id, year_month=period
     )
 
+    customize_seed_rows: list[dict[str, object]] = []
+    if default_503020 and default_503020.get("lines"):
+        for r in default_503020["lines"]:
+            customize_seed_rows.append(
+                {
+                    "category": r["category"],
+                    "limit": r["limit"],
+                    "bucket": r.get("bucket", ""),
+                }
+            )
+        customize_seed_rows.extend(
+            [{"category": "", "limit": "", "bucket": ""} for _ in range(8)]
+        )
+    cmt = crud.get_budget_commitment(db, user_id, period, f"acc:{account_id}")
+    budget_commitment_info = {"mode": cmt.mode} if cmt else None
+
     history_years = crud.list_history_years_for_budget_navigation(db, user_id, account_id)
     all_history_months = list(range(1, 13))
     selected_hist_year: int
@@ -1548,6 +1566,8 @@ def budgets_page(
             "selected_hist_month": selected_hist_month,
             "view_only_month": view_only_month,
             "current_period_ym": today_ym,
+            "customize_seed_rows": customize_seed_rows,
+            "budget_commitment_info": budget_commitment_info,
         },
     )
 
@@ -1791,17 +1811,36 @@ async def budgets_commit_customized(
     form = await request.form()
     cats = form.getlist("line_category")
     lims = form.getlist("line_limit")
-    if len(cats) != len(lims) or len(cats) != len(baseline_lines):
-        request.session["budget_error"] = "Budget form was incomplete — try Customize again."
-        return RedirectResponse(url=f"/budgets?account_id={account_id}&period={ym}&budget_mode=customize", status_code=303)
+    others = form.getlist("line_other")
+    nmax = max(len(cats), len(lims), len(others))
+    while len(others) < nmax:
+        others.append("")
+    while len(lims) < nmax:
+        lims.append("")
+    while len(cats) < nmax:
+        cats.append("")
     submitted: list[dict[str, object]] = []
-    for c, lim_raw in zip(cats, lims):
+    for i in range(len(cats)):
+        c = str(cats[i]).strip() if i < len(cats) else ""
+        if not c:
+            continue
+        lim_raw = lims[i] if i < len(lims) else ""
         lim = _parse_limit_amount(str(lim_raw))
-        if lim is None:
-            request.session["budget_error"] = "Each line needs a valid limit (numbers only; no currency symbols)."
+        if lim is None or lim <= 0:
+            request.session["budget_error"] = "Each filled row needs a valid limit (numbers only; no currency symbols)."
             return RedirectResponse(url=f"/budgets?account_id={account_id}&period={ym}&budget_mode=customize", status_code=303)
-        submitted.append({"category": str(c).strip(), "limit": float(lim)})
-    err = budget_validate.validate_customized_503020(baseline_lines, submitted)
+        odr = str(others[i]).strip()[:120] if i < len(others) else ""
+        od: str | None = odr if c.lower() == "other" else None
+        if c.lower() == "other" and not od:
+            request.session["budget_error"] = (
+                'When category is "Other", enter your custom label (what this line is for).'
+            )
+            return RedirectResponse(
+                url=f"/budgets?account_id={account_id}&period={ym}&budget_mode=customize",
+                status_code=303,
+            )
+        submitted.append({"category": c, "limit": float(lim), "other_detail": od})
+    err = budget_validate.validate_customized_503020_flexible(baseline_lines, submitted)
     if err:
         request.session["budget_error"] = err
         return RedirectResponse(url=f"/budgets?account_id={account_id}&period={ym}&budget_mode=customize", status_code=303)
@@ -1809,14 +1848,16 @@ async def budgets_commit_customized(
     crud.delete_all_budgets_for_month_scope(db, user_id=user_id, year_month=ym, bank_account_id=account_id)
     new_total = 0.0
     for row in submitted:
+        cat = str(row["category"])
+        od_row = row.get("other_detail") if cat.strip().lower() == "other" else None
         crud.upsert_monthly_budget(
             db,
             user_id=user_id,
-            category_name=str(row["category"]),
+            category_name=cat,
             year_month=ym,
             amount_limit=float(row["limit"]),
             bank_account_id=account_id,
-            other_detail=None,
+            other_detail=od_row,
         )
         new_total += float(row["limit"])
     crud.upsert_budget_provenance(db, user_id, ym, sk, "customized_503020")
@@ -1855,6 +1896,13 @@ async def budgets_commit_scratch(
     cats = form.getlist("scratch_cat")
     lims = form.getlist("scratch_limit")
     others = form.getlist("scratch_other")
+    nmax = max(len(cats), len(lims), len(others))
+    while len(others) < nmax:
+        others.append("")
+    while len(lims) < nmax:
+        lims.append("")
+    while len(cats) < nmax:
+        cats.append("")
     rows_out: list[tuple[str, float, str | None]] = []
     for i, c in enumerate(cats):
         cat = str(c).strip()
