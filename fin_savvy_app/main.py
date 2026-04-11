@@ -1487,6 +1487,7 @@ def budgets_page(
                         "category": r["category"],
                         "limit": float(r["limit"]),
                         "bucket": r.get("bucket"),
+                        "other_detail": r.get("other_detail"),
                     }
                     for r in default_503020["lines"]
                 ]
@@ -1524,6 +1525,13 @@ def budgets_page(
                     "bucket": r.get("bucket", ""),
                 }
             )
+    customize_edit_caps: dict[str, int] | None = None
+    if customize_editing and customize_seed_rows:
+        n_lines = len(customize_seed_rows)
+        customize_edit_caps = {
+            "baseline_line_count": n_lines,
+            "max_remove_or_add": budget_validate.max_add_or_remove_lines(n_lines),
+        }
     cmt = crud.get_budget_commitment(db, user_id, period, f"acc:{account_id}")
     budget_commitment_info = {"mode": cmt.mode} if cmt else None
 
@@ -1573,6 +1581,7 @@ def budgets_page(
             "view_only_month": view_only_month,
             "current_period_ym": today_ym,
             "customize_seed_rows": customize_seed_rows,
+            "customize_edit_caps": customize_edit_caps,
             "budget_commitment_info": budget_commitment_info,
         },
     )

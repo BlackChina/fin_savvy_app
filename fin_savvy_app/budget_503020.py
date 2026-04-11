@@ -94,6 +94,74 @@ def compliance_penalty_points(
     return _compliance_penalty_from_bucket_totals(buckets, total_lim, income_estimate)
 
 
+def split_balance_traffic_light(
+    needs: float,
+    wants: float,
+    savings: float,
+) -> dict[str, Any]:
+    """
+    Classify Needs/Wants/Savings share of allocated limits for UI (customize / tallies).
+
+    Red: wants exceed needs, or savings share is at/below 10%.
+    Green: at least as disciplined as 50/30/20 (needs>=~50%, wants<=~30%, savings>=~20%),
+          or an equal needs/wants split with savings at/above ~20% (e.g. 40/40/20).
+    Amber: other cases (e.g. equal needs/wants with savings between 10% and 20%).
+    """
+    total = float(needs) + float(wants) + float(savings)
+    if total <= 0:
+        return {
+            "total": 0.0,
+            "needs": float(needs),
+            "wants": float(wants),
+            "savings": float(savings),
+            "needs_pct": 0.0,
+            "wants_pct": 0.0,
+            "savings_pct": 0.0,
+            "state": "neutral",
+            "label": "No limits yet",
+        }
+    n_pct = 100.0 * float(needs) / total
+    w_pct = 100.0 * float(wants) / total
+    s_pct = 100.0 * float(savings) / total
+    eps = 0.85
+    state = "amber"
+    label = "Review split vs 50/30/20"
+
+    if w_pct > n_pct + 0.15:
+        state = "red"
+        label = "Wants exceed needs"
+    elif s_pct <= 10.0 + 1e-9:
+        state = "red"
+        label = "Savings & debt share is 10% or below"
+    elif n_pct >= 50.0 - eps and w_pct <= 30.0 + eps and s_pct >= 20.0 - eps:
+        state = "green"
+        label = "At or better than 50/30/20"
+    elif abs(n_pct - w_pct) <= eps and s_pct >= 20.0 - eps:
+        state = "green"
+        label = "Balanced needs/wants with healthy savings share"
+    elif abs(n_pct - w_pct) <= eps and s_pct > 10.0 + 1e-9:
+        state = "amber"
+        label = "Equal needs/wants; savings under 20% target"
+    elif s_pct < 20.0 - 1e-9 and s_pct > 10.0 + 1e-9 and w_pct <= n_pct + 0.15:
+        state = "amber"
+        label = "Savings share above 10% but under 20%"
+    elif w_pct > 30.0 + eps and s_pct >= 10.0 - 1e-9:
+        state = "amber"
+        label = "Wants high relative to 30% guideline"
+
+    return {
+        "total": total,
+        "needs": float(needs),
+        "wants": float(wants),
+        "savings": float(savings),
+        "needs_pct": round(n_pct, 1),
+        "wants_pct": round(w_pct, 1),
+        "savings_pct": round(s_pct, 1),
+        "state": state,
+        "label": label,
+    }
+
+
 def compliance_penalty_from_limit_bucket_rows(
     rows: list[tuple[float, str]],
     income_estimate: float,

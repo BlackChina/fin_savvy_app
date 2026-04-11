@@ -304,6 +304,27 @@ def compute_month_score_payload(
             if dev > 0.25:
                 total = max(0.0, total - min(8.0, (dev - 0.25) * 25.0))
         if (
+            commitment.mode == "customized"
+            and income_est is not None
+            and st is not None
+            and ct is not None
+            and float(st) > 0
+            and has_budgets
+        ):
+            incf = float(income_est)
+            stf = float(st)
+            ctf = float(ct)
+            base_rem = incf - stf
+            new_rem = incf - ctf
+            if new_rem > base_rem + 0.5:
+                gain = new_rem - base_rem
+                if base_rem >= 10.0:
+                    pct_improve = gain / base_rem
+                    bonus = min(4.0, pct_improve * 10.0)
+                else:
+                    bonus = min(4.0, (gain / stf) * 35.0)
+                total = min(100.0, total + bonus)
+        if (
             st is not None
             and ct is not None
             and float(st) > 0
@@ -367,6 +388,16 @@ def compute_month_score_payload(
                 "estimated income, and very different totals versus the app’s suggested envelope can reduce the headline score slightly.",
             }
         )
+        if commitment.mode == "customized":
+            transparency.append(
+                {
+                    "title": "Carry-over room (customized plan)",
+                    "body": "When you customize the suggested envelope, we compare estimated income minus your committed "
+                    "limits to the same figure for the original suggestion. If you leave more unallocated income "
+                    "(month-to-month breathing room, separate from the savings lines in your plan), that earns a small "
+                    "FinSavvy boost, capped so the headline score stays fair.",
+                }
+            )
 
     return {
         "year_month": year_month,

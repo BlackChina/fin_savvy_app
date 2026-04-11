@@ -13,6 +13,14 @@ def _row_key(category: str, other_detail: str | None) -> str:
     return f"cat::{c.lower()}"
 
 
+def max_add_or_remove_lines(baseline_line_count: int, *, max_line_change_ratio: float = 0.40) -> int:
+    """How many baseline rows may be removed and how many new rows may be added (each capped separately)."""
+    n = int(baseline_line_count)
+    if n <= 0:
+        return 0
+    return max(0, int(n * max_line_change_ratio))
+
+
 def validate_customized_503020_flexible(
     baseline: list[dict[str, Any]],
     submitted: list[dict[str, Any]],
@@ -22,13 +30,13 @@ def validate_customized_503020_flexible(
     total_max_ratio: float = 1.25,
 ) -> str | None:
     """
-    baseline: [{"category", "limit"}, ...] from the system suggestion.
+    baseline: [{"category", "limit", "other_detail" (optional)}, ...] from the system suggestion.
     submitted: [{"category", "limit", "other_detail" (optional)}, ...] non-empty rows only.
 
     Rules:
-      - Sum(submitted limits) within ±25% of sum(baseline limits).
-      - Count "edits" vs baseline: removed baseline keys + added keys + same-key limit changes.
-        At most int(len(baseline) * max_line_change_ratio) edits allowed.
+      - Sum(submitted limits) within ±25% of sum(baseline limits) (default 75%–125%).
+      - At most int(n * max_line_change_ratio) baseline rows may be removed (by key), and at most
+        that many brand-new rows may be added. Limit tweaks on kept rows do not count toward the 40%.
     """
     if not baseline:
         return "No baseline budget to customize — reload the page."
@@ -71,18 +79,17 @@ def validate_customized_503020_flexible(
     sub_keys = set(sub_map.keys())
     removed = len(base_keys - sub_keys)
     added = len(sub_keys - base_keys)
-    eps = 0.5
-    changed_lim = 0
-    for k in base_keys & sub_keys:
-        if abs(float(sub_map[k]) - float(base_map[k])) > eps:
-            changed_lim += 1
-    edits = removed + added + changed_lim
     n = len(baseline)
-    max_edits = max(0, int(n * max_line_change_ratio))
-    if edits > max_edits:
+    cap = max_add_or_remove_lines(n, max_line_change_ratio=max_line_change_ratio)
+    pct = int(round(max_line_change_ratio * 100))
+    if removed > cap:
         return (
-            f"You may change at most ~{int(max_line_change_ratio * 100)}% of the suggested lines "
-            f"({max_edits} of {n} line-level changes: swaps, new categories, or limit tweaks). "
-            f"This submission would count as {edits} changes."
+            f"You may remove at most {cap} of the {n} suggested lines ({pct}% of the list). "
+            f"This submission removes {removed}."
+        )
+    if added > cap:
+        return (
+            f"You may add at most {cap} new lines on top of the {n} suggested ({pct}% of the list). "
+            f"This submission adds {added} new line(s)."
         )
     return None

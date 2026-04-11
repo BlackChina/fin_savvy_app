@@ -55,6 +55,15 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
 .fs-weight{font-size:.72rem;color:#64748b;display:block;margin-bottom:.35rem;line-height:1.35}
 .fs-score-note{font-size:.8rem;color:#94a3b8;line-height:1.45;margin:.5rem 0 1rem}
 .month-has-data{color:#86efac;font-size:.72rem;font-weight:600}
+.budget-tally-card{border:1px solid #334155;border-radius:.5rem;padding:1rem 1.1rem;margin-top:1rem;background:rgba(15,23,42,.55)}
+.budget-tally-card h3{margin:0 0 .65rem;font-size:.9rem;color:#e2e8f0}
+.budget-tally-card table{font-size:.82rem;margin-bottom:.35rem}
+.budget-tally-card .tally-foot{font-size:.78rem;color:#94a3b8;margin:.4rem 0 0;line-height:1.45}
+.split-badge{padding:.4rem .75rem;border-radius:.4rem;font-size:.78rem;font-weight:600;display:inline-block;margin-top:.5rem;line-height:1.35}
+.split-badge--green{background:rgba(22,101,52,.38);color:#86efac;border:1px solid #166534}
+.split-badge--amber{background:rgba(120,53,15,.4);color:#fde68a;border:1px solid #b45309}
+.split-badge--red{background:rgba(127,29,29,.45);color:#fecaca;border:1px solid #991b1b}
+.split-badge--neutral{color:#94a3b8;border:1px solid #475569;background:rgba(30,41,59,.5)}
 </style>
 <link rel="stylesheet" href="/static/app-chrome.css" />
 <link rel="stylesheet" href="/static/finsavvy_background.css" />
@@ -143,7 +152,7 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
 <p class="hint" style="margin-top:0">{{ default_503020.rule_note }} Estimated income baseline for this envelope: <strong>R {{ default_503020.income_estimate | format_currency }}</strong> · Suggested total limits: <strong>R {{ default_503020.reference_total | format_currency }}</strong>.</p>
 <p class="hint" style="font-size:.82rem">Pools: Needs <span class="bucket-needs">R {{ default_503020.needs_pool | format_currency }}</span> · Wants <span class="bucket-wants">R {{ default_503020.wants_pool | format_currency }}</span> · Savings &amp; investments <span class="bucket-savings">R {{ default_503020.savings_pool | format_currency }}</span></p>
 {% if customize_editing %}
-<form method="post" action="/budgets/commit-customized" id="form-customize-budget">
+<form method="post" action="/budgets/commit-customized" id="form-customize-budget" data-income-est="{{ default_503020.income_estimate }}">
 <input type="hidden" name="account_id" value="{{ account_id }}"/>
 <input type="hidden" name="year_month" value="{{ period }}"/>
 <table><thead><tr><th>Bucket</th><th>Category</th><th>Limit</th><th class="col-other">If Other</th><th></th></tr></thead>
@@ -164,7 +173,20 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
 <td style="vertical-align:middle;width:3rem"><button type="button" class="btn-row-del" title="Remove this line">−</button></td>
 </tr>{% endfor %}
 </tbody></table>
-<p class="hint" style="font-size:.8rem">Edit or remove suggested lines, or add more with <strong>+</strong>. At most ~40% of the original lines may change; total must stay within ±25% of the suggested total.</p>
+{% if customize_edit_caps %}
+<p class="hint" style="font-size:.8rem">You may <strong>remove</strong> at most {{ customize_edit_caps.max_remove_or_add }} of the {{ customize_edit_caps.baseline_line_count }} suggested lines and <strong>add</strong> at most {{ customize_edit_caps.max_remove_or_add }} new lines (40% each way). You can change limits on lines you keep freely. The <strong>sum of all limits</strong> must stay between <strong>75%</strong> and <strong>125%</strong> of the suggested total (R {{ default_503020.reference_total | format_currency }}).</p>
+{% endif %}
+<div class="budget-tally-card" id="customize-budget-tally" aria-live="polite">
+<h3>Budget tally &amp; split</h3>
+<table><tbody>
+<tr><td>Needs total</td><td style="text-align:right"><span class="bucket-needs">R <span id="tally-needs">0.00</span></span></td><td style="text-align:right"><span id="tally-needs-pct">0</span>%</td></tr>
+<tr><td>Wants total</td><td style="text-align:right"><span class="bucket-wants">R <span id="tally-wants">0.00</span></span></td><td style="text-align:right"><span id="tally-wants-pct">0</span>%</td></tr>
+<tr><td>Savings &amp; debt total</td><td style="text-align:right"><span class="bucket-savings">R <span id="tally-savings">0.00</span></span></td><td style="text-align:right"><span id="tally-savings-pct">0</span>%</td></tr>
+<tr><td><strong>Allocated total</strong></td><td style="text-align:right"><strong>R <span id="tally-grand">0.00</span></strong></td><td></td></tr>
+</tbody></table>
+<p class="tally-foot">Estimated income this month: <strong>R {{ default_503020.income_estimate | format_currency }}</strong>. <strong id="tally-disposable-label">Unallocated (carry-over room)</strong>: R <span id="tally-disposable">0.00</span> (income minus allocated total; not double-counting your savings lines—they are part of allocated total).</p>
+<p id="customize-split-badge" class="split-badge split-badge--neutral" role="status">Enter limits to see 50/30/20 check.</p>
+</div>
 <div class="budget-actions">
 <button type="button" class="btn-add-row" id="btn-customize-add" data-tbody="customize-budget-tbody">+ Add line</button>
 <button type="submit">Create budget (customized)</button>
@@ -342,6 +364,73 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
 {% endif %}
 <script>
 (function(){
+  function fmtMoney(x){
+    var n = Number(x);
+    if (!isFinite(n)) n = 0;
+    return n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  }
+  function parseLimitInput(s){
+    if (s == null) return 0;
+    var t = String(s).replace(/,/g, "").trim();
+    if (!t) return 0;
+    var v = parseFloat(t);
+    return isFinite(v) ? v : 0;
+  }
+  /** Mirrors server budget_503020.split_balance_traffic_light for live customize tally. */
+  function splitTrafficLight(needs, wants, savings){
+    var total = needs + wants + savings;
+    if (total <= 0) {
+      return { state: "neutral", label: "Enter limits to see 50/30/20 check.", n: 0, w: 0, s: 0 };
+    }
+    var n = 100 * needs / total, w = 100 * wants / total, s = 100 * savings / total;
+    var eps = 0.85;
+    var state = "amber";
+    var label = "Review split vs 50/30/20";
+    if (w > n + 0.15) { state = "red"; label = "Wants exceed needs"; }
+    else if (s <= 10 + 1e-9) { state = "red"; label = "Savings & debt share is 10% or below"; }
+    else if (n >= 50 - eps && w <= 30 + eps && s >= 20 - eps) { state = "green"; label = "At or better than 50/30/20"; }
+    else if (Math.abs(n - w) <= eps && s >= 20 - eps) { state = "green"; label = "Balanced needs/wants with healthy savings share"; }
+    else if (Math.abs(n - w) <= eps && s > 10 + 1e-9) { state = "amber"; label = "Equal needs/wants; savings under 20% target"; }
+    else if (s < 20 - 1e-9 && s > 10 + 1e-9 && w <= n + 0.15) { state = "amber"; label = "Savings share above 10% but under 20%"; }
+    else if (w > 30 + eps && s >= 10 - 1e-9) { state = "amber"; label = "Wants high relative to 30% guideline"; }
+    return { state: state, label: label, n: n, w: w, s: s };
+  }
+  function recalcCustomizeTally(){
+    var form = document.getElementById("form-customize-budget");
+    if (!form) return;
+    var inc = parseFloat(form.getAttribute("data-income-est")) || 0;
+    var rows = form.querySelectorAll("#customize-budget-tbody tr.budget-dyn-row");
+    var needs = 0, wants = 0, savings = 0;
+    rows.forEach(function(tr){
+      var cat = tr.querySelector("select[name='line_category']");
+      var limIn = tr.querySelector("input[name='line_limit']");
+      var bkt = tr.querySelector("select[name='line_bucket']");
+      if (!cat || !limIn || (cat.value || "").trim() === "") return;
+      var amt = parseLimitInput(limIn.value);
+      if (amt <= 0) return;
+      var b = (bkt && bkt.value) ? bkt.value : "";
+      if (b === "needs") needs += amt;
+      else if (b === "wants") wants += amt;
+      else if (b === "savings") savings += amt;
+    });
+    var grand = needs + wants + savings;
+    var sp = splitTrafficLight(needs, wants, savings);
+    function setText(id, t){ var el = document.getElementById(id); if (el) el.textContent = t; }
+    setText("tally-needs", fmtMoney(needs));
+    setText("tally-wants", fmtMoney(wants));
+    setText("tally-savings", fmtMoney(savings));
+    setText("tally-grand", fmtMoney(grand));
+    setText("tally-needs-pct", grand > 0 ? sp.n.toFixed(1) : "0");
+    setText("tally-wants-pct", grand > 0 ? sp.w.toFixed(1) : "0");
+    setText("tally-savings-pct", grand > 0 ? sp.s.toFixed(1) : "0");
+    var disp = inc - grand;
+    setText("tally-disposable", fmtMoney(disp));
+    var badge = document.getElementById("customize-split-badge");
+    if (badge) {
+      badge.className = "split-badge split-badge--" + sp.state;
+      badge.textContent = sp.label + (grand > 0 ? " — Needs " + sp.n.toFixed(1) + "%, Wants " + sp.w.toFixed(1) + "%, Savings " + sp.s.toFixed(1) + "%." : "");
+    }
+  }
   function syncOtherCell(sel){
     var row = sel.closest("tr");
     if (!row) {
@@ -360,13 +449,19 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
     if (inp && !on) inp.value = "";
   }
   function bindSelect(sel){
-    sel.addEventListener("change", function(){ syncOtherCell(sel); });
+    sel.addEventListener("change", function(){ syncOtherCell(sel); recalcCustomizeTally(); });
     syncOtherCell(sel);
   }
   function wireRow(tr){
     tr.querySelectorAll("select[data-budget-cat]").forEach(bindSelect);
+    tr.querySelectorAll("select.line-bucket").forEach(function(sb){
+      sb.addEventListener("change", recalcCustomizeTally);
+    });
+    tr.querySelectorAll("input[name='line_limit']").forEach(function(inp){
+      inp.addEventListener("input", recalcCustomizeTally);
+    });
     var del = tr.querySelector(".btn-row-del");
-    if (del) del.addEventListener("click", function(){ tr.remove(); });
+    if (del) del.addEventListener("click", function(){ tr.remove(); recalcCustomizeTally(); });
   }
   function appendFromTemplate(tbodyId){
     var tpl = document.getElementById("tmpl-budget-line");
@@ -375,6 +470,7 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
     var tr = tpl.content.cloneNode(true).querySelector("tr");
     tb.appendChild(tr);
     wireRow(tr);
+    if (tbodyId === "customize-budget-tbody") recalcCustomizeTally();
   }
   document.addEventListener("click", function(e){
     var add = e.target.closest(".btn-add-row");
@@ -384,6 +480,13 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
     }
   });
   document.querySelectorAll("#customize-budget-tbody tr.budget-dyn-row").forEach(wireRow);
+  var custForm = document.getElementById("form-customize-budget");
+  if (custForm) {
+    custForm.addEventListener("input", function(ev){
+      if (ev.target && ev.target.name === "line_limit") recalcCustomizeTally();
+    });
+    recalcCustomizeTally();
+  }
   var addForm = document.getElementById("form-add-budget-line");
   if (addForm) addForm.querySelectorAll("select[data-budget-cat]").forEach(bindSelect);
   var st = document.getElementById("scratch-budget-tbody");
