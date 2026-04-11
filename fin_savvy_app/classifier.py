@@ -12,7 +12,7 @@ from . import ml_classifier
 # December 2025: Transaction Category (from your spreadsheet column).
 # Keywords match bank Description so we assign the right category for Spending by category.
 CATEGORY_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
-    ("Telecommunications", ("VODACOM", "TELKOM", "MTN", "CELL C", "AIRTIME", "DATA", "MOBILE")),
+    ("Telecommunications", ("VODACOM", "VOD PREPAID", "VODCOM", "TELKOM", "MTN", "CELL C", "AIRTIME", "DATA", "MOBILE")),
     ("Groceries", (
         "SHOPRITE", "CHECKERS", "PICK N PAY", "PNP", "WOOLWORTHS", "SPAR", "OK FOODS",
         "FOOD LOVER", "MAKRO", "GROCER", "HYPER",
@@ -31,6 +31,7 @@ CATEGORY_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
         "UBER EATS", "MR D FOOD", "DEBONAIRS", "STEERS", "KFC", "MCDONALD", "BURGER KING",
         "NANDO", "WIMPY", "ROCOMAMAS", "SPUR", "OCEAN BASKET", "PANAROTTI", "NEWS CAFE",
         "TIGER'S MILK", "HUSSAR", "MONTANA", "RESTAURANT", "TAKEAWAY", "DINING", "PIZZA",
+        "FINE DINING", "STEAKHOUSE", "BISTRO", "EATERY",
     )),
     ("Shopping", (
         "TAKEALOT", "EDGARS", "TRUWORTHS", "SPORTSCENE", "TOTALSPORTS", "STREET FEVER",
@@ -41,7 +42,12 @@ CATEGORY_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
     )),
     ("Entertainment", (
         "NETFLIX", "SPOTIFY", "SHOWMAX", "DSTV", "MULTICHOICE", "CINEMA", "MOVIE",
-        "CONCERT", "SPORTING EVENT", "TICKETS",
+        "CONCERT", "SPORTING EVENT", "TICKETS", "THEATRE", "THEATER", "LIVE MUSIC",
+    )),
+    # Bars, clubs, and bottle-forward nights out — surfaced for lifestyle / “leakage” insights.
+    ("Alcohol & nightlife", (
+        "BAR ", " PUB", "TAVERN", "SHEBEEN", "NIGHTCLUB", "NIGHT CLUB", "BREWERY",
+        "BRASSERIE", "COCKTAIL", "WINERY", "HOPS ", " CRAFT ",
     )),
     ("Health", (
         "CLINIC", "HOSPITAL", "PHARMACY", "DIS-CHEM", "CLICKS", "DOCTOR", "DENTIST",
@@ -53,8 +59,11 @@ CATEGORY_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
     ("Insurance", (
         "OLD MUTUAL", "MOMENTUM", "LIBERTY", "SANLAM", "INSURANCE", "CAR INSURANCE",
     )),
+    # Avoid bare "BANK" — it matches placenames like ROSEBANK and mis-fires before lifestyle categories.
     ("Bank Fees", (
-        "CAPITEC", "STANDARD BANK", "ABSA", "FNB", "BANK", "ATM", "FEE", "DEBIT ORDER",
+        "CAPITEC", "STANDARD BANK", "ABSA", "FNB", "ATM", "FEE", "DEBIT ORDER",
+        "EXCESS INTEREST", "SERVICE FEE", "MONTHLY FEE", "ADMIN FEE",
+        "INTERNET BANK", "APP PAYMENT", "POS PURCHASE FEE",
     )),
     ("Savings", ("SAVINGS", "SAVINGS ACCT", "DEPOSIT")),
     ("Investments", ("SANLAM", "INVESTMENT", "INVEST")),
@@ -67,7 +76,7 @@ CATEGORY_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
 # December 2025: Party Name (from your spreadsheet column).
 # Keywords match bank Description so Parties you pay groups by the party you specified.
 PARTY_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
-    ("Vodacom", ("VODACOM",)),
+    ("Vodacom", ("VODACOM", "VOD PREPAID", "VODCOM")),
     ("Shoprite Checkers", ("SHOPRITE", "CHECKERS HYPER", "CHECKERS ")),
     ("Pick n Pay", ("PICK N PAY", "PNP ", "PNP HYPER")),
     ("Checkers", ("CHECKERS",)),
@@ -142,7 +151,8 @@ PARTY_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
     ("News Cafe", ("NEWS CAFE",)),
     ("Tiger's Milk", ("TIGER'S MILK", "TIGERS MILK")),
     ("Hussar Grill", ("HUSSAR",)),
-    ("Bossa", ("BOSSA", "BOSSASOMERSET", "BOSSA SOMERSET", "BOSSA SOMERSET WEST")),
+    # Avoid bare "BOSSA" — substring matches are too broad; local ML already over-predicts common parties.
+    ("Bossa", ("BOSSASOMERS", "BOSSASOMERSET", "BOSSA SOMERSET", "BOSSA SOMERSET WEST", "C*BOSSASOMER")),
     ("Gym", ("GYM", "ZONEFITNES", "ZONE FITNESS")),
     ("Hair Salon", ("HAIRDRESSER", "HAIR SALON")),
     ("Barber Shop", ("BARBER",)),

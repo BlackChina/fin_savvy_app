@@ -85,4 +85,28 @@ def compute_dashboard_alerts(
                 }
             )
 
+        # Lifestyle-heavy spend (dining out, entertainment, bars) — common “leakage” bucket users miss.
+        lifestyle_labels = frozenset({"Dining", "Entertainment", "Alcohol & nightlife"})
+        lifestyle_total = 0.0
+        for t in expenses:
+            lab = classifier.get_category_label(t.description_raw, t.amount) or "Other"
+            if lab in lifestyle_labels:
+                lifestyle_total += abs(t.amount)
+        if (
+            total_abs >= 2500
+            and lifestyle_total / total_abs >= 0.18
+        ):
+            pct = (lifestyle_total / total_abs) * 100.0
+            alerts.append(
+                {
+                    "level": "info",
+                    "code": "lifestyle_spending_share",
+                    "title": "Lifestyle spending pattern",
+                    "message": (
+                        f"About {pct:.0f}% of this period’s expenses are Dining, Entertainment, or Alcohol & nightlife combined. "
+                        "Check “Spending by category” and month-over-month trends to see whether small habit changes are showing up in the totals."
+                    ),
+                }
+            )
+
     return alerts

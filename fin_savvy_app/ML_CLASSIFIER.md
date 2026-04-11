@@ -106,6 +106,15 @@ Mitigations built into the app:
 
 For a clean slate without ML while you relabel data: `FINSAVVY_CLASSIFIER=keyword`.
 
+### Troubleshooting: “Parties you pay” mostly one merchant (e.g. Bossa)
+
+1. **Keywords run first** — only lines whose description contains a party keyword (see `PARTY_KEYWORDS` in `classifier.py`) get that label without ML.
+2. **Everything else** goes to **local ML** when `FINSAVVY_CLASSIFIER=local`. A small logistic model trained on a skewed CSV often predicts the **same party** for many unrelated strings (especially if `FINSAVVY_ML_MIN_PROBABILITY=0`, which always accepts the top guess).
+3. **Fix:** raise **`FINSAVVY_ML_MIN_PROBABILITY`** (try `0.32`–`0.45`); export real descriptions with `export_training_csv.py`, label diverse parties, **merge** into your training CSV, **retrain**, restart the app. Add **specific** keyword rows for recurring gibberish (e.g. bank internal codes) once you know what they are.
+4. **Salary showing as Bossa** — if the bank line literally contains Bossa merchant strings, that is the keyword path; otherwise it is the same ML collapse; use min probability + relabel or a payroll keyword for your employer text.
+
+**OpenAI mode** (`FINSAVVY_CLASSIFIER=openai` + API key) can read messy descriptions better, but adds cost, latency, and sending descriptions off-device; try threshold + retrain + keywords first.
+
 ### 4. Retrain when you add data
 
 Add more rows to your CSV, then run the training command again. Restart the app to load the new models.
