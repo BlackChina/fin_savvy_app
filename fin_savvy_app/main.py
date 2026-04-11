@@ -24,7 +24,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from . import alerts, auth, classifier, crud, csv_parser, insights, models, pdf_parser, receipt_ocr, schemas, tax_calc
+from . import alerts, auth, budget_recommendations, classifier, crud, csv_parser, insights, models, pdf_parser, receipt_ocr, schemas, tax_calc
 from .database import SessionLocal, init_db
 from .extract_finsavvy_html_assets import sync_poster_pngs_from_background_html
 
@@ -1351,6 +1351,11 @@ def budgets_page(
                 "budgets": [],
                 "categories": classifier.get_all_category_names(),
                 "error": None,
+                "recommendation_rows": [],
+                "recommendation_income_avg": 0.0,
+                "recommendation_prior_months": [],
+                "hide_recommendations": False,
+                "customize_hint": False,
             },
         )
     if account_id is None:
@@ -1369,6 +1374,15 @@ def budgets_page(
     if not period:
         period = f"{date.today().year}-{date.today().month:02d}"
     budgets = crud.list_budgets_for_user(db, user_id, period, bank_account_id=account_id)
+
+    sess_hide_key = f"budgethide:{account_id}:{period}"
+    if request.query_params.get("clear_rec") == "1":
+        request.session.pop(sess_hide_key, None)
+    hide_recommendations = request.session.get(sess_hide_key) == "1"
+
+    rec_payload = budget_recommendations.compute_recommendations(db, account_id, period)
+    customize_hint = request.query_params.get("customize") == "1"
+
     return templates.TemplateResponse(
         "budgets.html",
         {
@@ -1380,7 +1394,90 @@ def budgets_page(
             "budgets": budgets,
             "categories": classifier.get_all_category_names() + ["Other"],
             "error": None,
+            "recommendation_rows": rec_payload["rows"],
+            "recommendation_income_avg": rec_payload["income_hint_avg"],
+            "recommendation_prior_months": rec_payload["prior_months_used"],
+            "hide_recommendations": hide_recommendations,
+            "customize_hint": customize_hint,
         },
+    )
+
+
+@app.post("/budgets/recommendations/accept", response_model=None, response_class=HTMLResponse)
+def budgets_recommendations_accept(
+    request: Request,
+    account_id: int = Form(...),
+    year_month: str = Form(...),
+    scope: str = Form("account"),
+    db: Session = Depends(get_db),
+    user_id: int | None = Depends(get_current_user_id),
+):
+    user = request.session.get("user")
+    if not user or user_id is None:
+        return RedirectResponse(url="/login", status_code=303)
+    if not crud.get_bank_account_for_user(db, account_id, user_id):
+        return RedirectResponse(url="/budgets", status_code=303)
+    bank_scope = None if scope.strip().lower() == "all" else account_id
+    budget_recommendations.apply_recommendations(
+        db,
+        user_id=user_id,
+        account_id=account_id,
+        year_month=year_month.strip(),
+        bank_account_id=bank_scope,
+    )
+    return RedirectResponse(
+        url=f"/budgets?account_id={account_id}&period={year_month.strip()}",
+        status_code=303,
+    )
+
+
+@app.post("/budgets/recommendations/accept-custom", response_model=None, response_class=HTMLResponse)
+def budgets_recommendations_accept_custom(
+    request: Request,
+    account_id: int = Form(...),
+    year_month: str = Form(...),
+    scope: str = Form("account"),
+    db: Session = Depends(get_db),
+    user_id: int | None = Depends(get_current_user_id),
+):
+    user = request.session.get("user")
+    if not user or user_id is None:
+        return RedirectResponse(url="/login", status_code=303)
+    if not crud.get_bank_account_for_user(db, account_id, user_id):
+        return RedirectResponse(url="/budgets", status_code=303)
+    bank_scope = None if scope.strip().lower() == "all" else account_id
+    budget_recommendations.apply_recommendations(
+        db,
+        user_id=user_id,
+        account_id=account_id,
+        year_month=year_month.strip(),
+        bank_account_id=bank_scope,
+    )
+    ym = year_month.strip()
+    return RedirectResponse(
+        url=f"/budgets?account_id={account_id}&period={ym}&customize=1#custom-budget",
+        status_code=303,
+    )
+
+
+@app.post("/budgets/recommendations/decline", response_model=None, response_class=HTMLResponse)
+def budgets_recommendations_decline(
+    request: Request,
+    account_id: int = Form(...),
+    year_month: str = Form(...),
+    db: Session = Depends(get_db),
+    user_id: int | None = Depends(get_current_user_id),
+):
+    user = request.session.get("user")
+    if not user or user_id is None:
+        return RedirectResponse(url="/login", status_code=303)
+    if not crud.get_bank_account_for_user(db, account_id, user_id):
+        return RedirectResponse(url="/budgets", status_code=303)
+    ym = year_month.strip()
+    request.session[f"budgethide:{account_id}:{ym}"] = "1"
+    return RedirectResponse(
+        url=f"/budgets?account_id={account_id}&period={ym}#custom-budget",
+        status_code=303,
     )
 
 
