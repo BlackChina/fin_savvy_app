@@ -481,6 +481,78 @@ def delete_monthly_budget(db: Session, budget_id: int, user_id: int) -> bool:
     return True
 
 
+def get_budget_provenance(db: Session, user_id: int, year_month: str, scope_key: str) -> str | None:
+    row = (
+        db.query(models.BudgetMonthProvenance)
+        .filter(
+            models.BudgetMonthProvenance.user_id == user_id,
+            models.BudgetMonthProvenance.year_month == year_month,
+            models.BudgetMonthProvenance.scope_key == scope_key,
+        )
+        .first()
+    )
+    return row.origin if row else None
+
+
+def upsert_budget_provenance(db: Session, user_id: int, year_month: str, scope_key: str, origin: str) -> None:
+    row = (
+        db.query(models.BudgetMonthProvenance)
+        .filter(
+            models.BudgetMonthProvenance.user_id == user_id,
+            models.BudgetMonthProvenance.year_month == year_month,
+            models.BudgetMonthProvenance.scope_key == scope_key,
+        )
+        .first()
+    )
+    now = datetime.utcnow()
+    if row:
+        row.origin = origin
+        row.updated_at = now
+    else:
+        db.add(
+            models.BudgetMonthProvenance(
+                user_id=user_id,
+                year_month=year_month,
+                scope_key=scope_key,
+                origin=origin,
+                updated_at=now,
+            )
+        )
+    db.commit()
+
+
+def note_manual_budget_change(db: Session, user_id: int, year_month: str, scope_key: str) -> None:
+    """Call after user saves a budget line manually (not from accept-all)."""
+    row = (
+        db.query(models.BudgetMonthProvenance)
+        .filter(
+            models.BudgetMonthProvenance.user_id == user_id,
+            models.BudgetMonthProvenance.year_month == year_month,
+            models.BudgetMonthProvenance.scope_key == scope_key,
+        )
+        .first()
+    )
+    now = datetime.utcnow()
+    if row:
+        if row.origin == "recommended":
+            row.origin = "recommended_custom"
+        elif row.origin in ("declined", "unknown"):
+            row.origin = "manual_only"
+        row.updated_at = now
+        db.commit()
+        return
+    db.add(
+        models.BudgetMonthProvenance(
+            user_id=user_id,
+            year_month=year_month,
+            scope_key=scope_key,
+            origin="manual_only",
+            updated_at=now,
+        )
+    )
+    db.commit()
+
+
 def list_transactions_for_linking(
     db: Session,
     user_id: int,

@@ -24,7 +24,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from . import alerts, auth, budget_recommendations, classifier, crud, csv_parser, finsavvy_score, insights, models, pdf_parser, receipt_ocr, schemas, tax_calc
+from . import alerts, auth, budget_history, budget_recommendations, classifier, crud, csv_parser, finsavvy_score, insights, models, pdf_parser, receipt_ocr, schemas, tax_calc
 from .database import SessionLocal, init_db
 from .extract_finsavvy_html_assets import sync_poster_pngs_from_background_html
 
@@ -1358,6 +1358,7 @@ def budgets_page(
                 "customize_hint": False,
                 "period_choices": [],
                 "finsavvy_payload": None,
+                "budget_history_rows": [],
             },
         )
     if account_id is None:
@@ -1394,6 +1395,11 @@ def budgets_page(
         db, user_id=user_id, account_id=account_id, year_month=period
     )
 
+    hist_months = budget_history.list_history_months(db, user_id, account_id, 36)
+    budget_history_rows = budget_history.build_budget_history_rows(
+        db, user_id=user_id, account_id=account_id, months=hist_months
+    )
+
     return templates.TemplateResponse(
         "budgets.html",
         {
@@ -1412,6 +1418,7 @@ def budgets_page(
             "customize_hint": customize_hint,
             "period_choices": period_choices,
             "finsavvy_payload": fs_payload,
+            "budget_history_rows": budget_history_rows,
         },
     )
 
@@ -1438,8 +1445,11 @@ def budgets_recommendations_accept(
         year_month=year_month.strip(),
         bank_account_id=bank_scope,
     )
+    ym = year_month.strip()
+    sk = "global" if scope.strip().lower() == "all" else f"acc:{account_id}"
+    crud.upsert_budget_provenance(db, user_id, ym, sk, "recommended")
     return RedirectResponse(
-        url=f"/budgets?account_id={account_id}&period={year_month.strip()}",
+        url=f"/budgets?account_id={account_id}&period={ym}",
         status_code=303,
     )
 
@@ -1467,6 +1477,8 @@ def budgets_recommendations_accept_custom(
         bank_account_id=bank_scope,
     )
     ym = year_month.strip()
+    sk = "global" if scope.strip().lower() == "all" else f"acc:{account_id}"
+    crud.upsert_budget_provenance(db, user_id, ym, sk, "recommended_custom")
     return RedirectResponse(
         url=f"/budgets?account_id={account_id}&period={ym}&customize=1#custom-budget",
         status_code=303,
@@ -1478,6 +1490,7 @@ def budgets_recommendations_decline(
     request: Request,
     account_id: int = Form(...),
     year_month: str = Form(...),
+    scope: str = Form("account"),
     db: Session = Depends(get_db),
     user_id: int | None = Depends(get_current_user_id),
 ):
@@ -1488,6 +1501,8 @@ def budgets_recommendations_decline(
         return RedirectResponse(url="/budgets", status_code=303)
     ym = year_month.strip()
     request.session[f"budgethide:{account_id}:{ym}"] = "1"
+    sk = "global" if scope.strip().lower() == "all" else f"acc:{account_id}"
+    crud.upsert_budget_provenance(db, user_id, ym, sk, "declined")
     return RedirectResponse(
         url=f"/budgets?account_id={account_id}&period={ym}#custom-budget",
         status_code=303,
@@ -1511,15 +1526,18 @@ def budgets_save(
     if not crud.get_bank_account_for_user(db, account_id, user_id):
         return RedirectResponse(url="/budgets", status_code=303)
     bank_scope = None if scope == "all" else account_id
+    ym = year_month.strip()
     crud.upsert_monthly_budget(
         db,
         user_id=user_id,
         category_name=category_name.strip(),
-        year_month=year_month.strip(),
+        year_month=ym,
         amount_limit=max(0.0, amount_limit),
         bank_account_id=bank_scope,
     )
-    return RedirectResponse(url=f"/budgets?account_id={account_id}&period={year_month}", status_code=303)
+    sk = "global" if bank_scope is None else f"acc:{account_id}"
+    crud.note_manual_budget_change(db, user_id, ym, sk)
+    return RedirectResponse(url=f"/budgets?account_id={account_id}&period={ym}", status_code=303)
 
 
 @app.post("/budgets/{budget_id}/delete", response_model=None, response_class=HTMLResponse)

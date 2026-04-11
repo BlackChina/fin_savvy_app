@@ -28,12 +28,29 @@ def _ensure_schema_patches() -> None:
 
     try:
         insp = inspect(engine)
-        if "receipts" not in insp.get_table_names():
-            return
-        cols = {c["name"] for c in insp.get_columns("receipts")}
-        if "transaction_id" not in cols:
+        tables = insp.get_table_names()
+        if "receipts" in tables:
+            cols = {c["name"] for c in insp.get_columns("receipts")}
+            if "transaction_id" not in cols:
+                with engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE receipts ADD COLUMN transaction_id INTEGER"))
+        if "budget_month_provenance" not in tables:
             with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE receipts ADD COLUMN transaction_id INTEGER"))
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE budget_month_provenance (
+                            id SERIAL PRIMARY KEY,
+                            user_id INTEGER NOT NULL REFERENCES users(id),
+                            year_month VARCHAR(7) NOT NULL,
+                            scope_key VARCHAR(32) NOT NULL,
+                            origin VARCHAR(32) NOT NULL DEFAULT 'unknown',
+                            updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                            CONSTRAINT uq_budget_month_provenance UNIQUE (user_id, year_month, scope_key)
+                        )
+                        """
+                    )
+                )
     except Exception:
         pass
 

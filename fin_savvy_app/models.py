@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from .database import Base
@@ -100,6 +100,20 @@ class MonthlyBudget(Base):
 
     user = relationship("User", back_populates="monthly_budgets")
     bank_account = relationship("BankAccount")
+
+
+class BudgetMonthProvenance(Base):
+    """How a month's budget lines were chosen: app recommendation, hybrid, custom, or declined suggestion."""
+
+    __tablename__ = "budget_month_provenance"
+    __table_args__ = (UniqueConstraint("user_id", "year_month", "scope_key", name="uq_budget_month_provenance"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    year_month = Column(String(7), nullable=False)  # YYYY-MM
+    scope_key = Column(String(32), nullable=False)  # "acc:12" for this-account limits, "global" for all-accounts
+    origin = Column(String(32), nullable=False, default="unknown")
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class Receipt(Base):

@@ -87,6 +87,11 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
 <form method="post" action="/budgets/recommendations/decline" style="margin-top:.75rem">
 <input type="hidden" name="account_id" value="{{ account_id }}"/>
 <input type="hidden" name="year_month" value="{{ period }}"/>
+<label class="hint" style="font-size:.78rem;margin-bottom:.25rem">Record decline for scope</label>
+<select name="scope" style="max-width:16rem;margin-bottom:.5rem">
+<option value="account">This account</option>
+<option value="all">All accounts</option>
+</select>
 <button type="submit" class="rec-decline">Decline — I’ll create my own budget</button>
 </form>
 {% else %}
@@ -170,6 +175,34 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
 <details class="fs-how"><summary>How this score is calculated</summary>
 {% for block in finsavvy_payload.transparency %}<p><strong style="color:#cbd5e1">{{ block.title }}</strong><br/>{{ block.body }}</p>{% endfor %}
 </details>
+</div>
+{% endif %}
+{% if budget_history_rows|length > 0 %}
+<div class="card">
+<h2>Budget &amp; score history</h2>
+<p class="hint" style="margin-top:0">Browse past months for <strong>this account</strong>. <em>How budgets were set</em> is tracked when you use app suggestions or save manually. <strong>Adherence</strong> is the budget-discipline pillar (0–100) from the FinSavvy model for that month. Open a month to edit limits or read the full score breakdown.</p>
+<div style="overflow:auto;max-height:26rem;border:1px solid #334155;border-radius:.5rem">
+<table><thead><tr>
+<th>Month</th>
+<th>How budgets were set</th>
+<th>FinSavvy</th>
+<th>Grade</th>
+<th title="Budget vs limits (pillar score)">Adherence</th>
+<th title="Lifestyle pillar">Lifestyle</th>
+<th title="Cash vs receipts pillar">Receipts</th>
+<th></th>
+</tr></thead><tbody>
+{% for h in budget_history_rows %}<tr style="{% if h.period == period %}background:rgba(56,189,248,.07){% endif %}">
+<td><strong>{{ h.period }}</strong>{% if h.period == period %} <span style="color:#38bdf8;font-size:.72rem">viewing</span>{% endif %}</td>
+<td><span title="{{ h.origin_detail }}">{{ h.origin_short }}</span></td>
+<td>{% if h.finsavvy_score is not none %}{{ h.finsavvy_score }}{% else %}—{% endif %}</td>
+<td>{{ h.grade }}</td>
+<td>{% if h.adherence is not none %}{{ h.adherence }}{% else %}—{% endif %}</td>
+<td>{% if h.lifestyle is not none %}{{ h.lifestyle }}{% else %}—{% endif %}</td>
+<td>{% if h.receipt is not none %}{{ h.receipt }}{% else %}—{% endif %}</td>
+<td><a href="{{ h.view_url }}" style="color:#38bdf8;font-size:.85rem;font-weight:600">Open</a></td>
+</tr>{% endfor %}</tbody></table>
+</div>
 </div>
 {% endif %}
 {% endif %}
