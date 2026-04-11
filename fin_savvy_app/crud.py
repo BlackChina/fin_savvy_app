@@ -415,6 +415,18 @@ def list_distinct_budget_months_for_user(db: Session, user_id: int, limit: int =
     return labels[:limit]
 
 
+def list_history_years_for_budget_navigation(db: Session, user_id: int, bank_account_id: int) -> list[int]:
+    """
+    Years to show in Budget history: any year with saved limits, any year with transactions/statements
+    for this account, plus the current calendar year (so you can always return to the open month).
+    """
+    years = set(list_distinct_budget_years_for_account(db, user_id, bank_account_id))
+    for y, _m in get_available_months(db, bank_account_id):
+        years.add(int(y))
+    years.add(date.today().year)
+    return sorted(years, reverse=True)
+
+
 def list_distinct_budget_years_for_account(db: Session, user_id: int, bank_account_id: int) -> list[int]:
     """Years that have at least one budget row for this user and account (or global rows)."""
     rows = (

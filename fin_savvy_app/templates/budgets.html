@@ -37,6 +37,10 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
 .bucket-needs{color:#7dd3fc}.bucket-wants{color:#fbbf24}.bucket-savings{color:#86efac}
 .history-nav{display:flex;flex-wrap:wrap;gap:.5rem;align-items:flex-end;margin-top:.75rem}
 .history-nav select{max-width:10rem;margin-bottom:0}
+.fs-pillar-title{font-size:.8rem;color:#cbd5e1;font-weight:600;display:block;margin-bottom:.15rem}
+.fs-weight{font-size:.72rem;color:#64748b;display:block;margin-bottom:.35rem;line-height:1.35}
+.fs-score-note{font-size:.8rem;color:#94a3b8;line-height:1.45;margin:.5rem 0 1rem}
+.month-has-data{color:#86efac;font-size:.72rem;font-weight:600}
 </style>
 <link rel="stylesheet" href="/static/app-chrome.css" />
 <link rel="stylesheet" href="/static/finsavvy_background.css" />
@@ -79,7 +83,7 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
 <p class="hint" style="margin-top:.75rem;margin-bottom:0">Each month has its own limits and score. FinSavvy uses <strong>50% Needs</strong> (essentials), <strong>30% Wants</strong> (discretionary), <strong>20% Savings &amp; debt/investments</strong> for the suggested envelope, split using your recent categories.</p>
 </div>
 
-{% if not budget_finalized and scratch_editing %}
+{% if not view_only_month and not budget_finalized and scratch_editing %}
 <div class="card" id="scratch-budget">
 <h2>Custom budget from scratch</h2>
 <p class="hint" style="margin-top:0">Add one or more lines. <strong>Limit</strong>: type numbers only (no R or other symbols). Categories include common defaults plus labels we have seen on your statements. For <strong>Other</strong>, describe what it covers so we can suggest it again later.</p>
@@ -99,7 +103,7 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
 <button type="submit">Create budget</button>
 </form>
 </div>
-{% elif not budget_finalized and default_503020 %}
+{% elif not view_only_month and not budget_finalized and default_503020 %}
 <div class="card" id="unified-budget">
 <h2>FinSavvy suggested budget (50 / 30 / 20)</h2>
 <p class="hint" style="margin-top:0">{{ default_503020.rule_note }} Estimated income baseline for this envelope: <strong>R {{ default_503020.income_estimate | format_currency }}</strong> · Suggested total limits: <strong>R {{ default_503020.reference_total | format_currency }}</strong>.</p>
@@ -138,32 +142,61 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
 </div>
 {% endif %}
 </div>
-{% elif not budget_finalized %}
+{% elif not view_only_month and not budget_finalized %}
 <div class="card">
 <h2>No suggested envelope yet</h2>
 <p class="hint">We need a few months of history before the 50/30/20 table can be built. You can still create a budget from scratch.</p>
 <a class="btn-secondary" href="/budgets?account_id={{ account_id }}&amp;period={{ period }}&amp;budget_mode=scratch">Build my own from scratch</a>
 </div>
+{% elif view_only_month and not budget_finalized %}
+<div class="card">
+<h2>{{ period }} (ended)</h2>
+<p class="hint" style="margin-bottom:0">There is no finalized budget on record for this month. The FinSavvy score below still reflects that month’s behaviour (lifestyle, receipts, and any limits if present).</p>
+</div>
 {% endif %}
 
 {% if budget_finalized %}
+{% if view_only_month %}
+<div class="card" style="border-color:#334155;background:rgba(15,23,42,.4)">
+<p class="hint" style="margin:0"><strong>Read-only month.</strong> You are viewing <strong>{{ period }}</strong>. Compare the FinSavvy reference envelope to the budget you committed, then see the score and budget vs actual.</p>
+</div>
+{% else %}
 <div class="ok-banner">Budget finalized for <strong>{{ period }}</strong>. You can add or adjust lines below; large changes may affect your FinSavvy score.</div>
+{% endif %}
+
+{% if view_only_month and default_503020 %}
+<div class="card" id="reference-503020">
+<h2>FinSavvy reference budget (50 / 30 / 20) — {{ period }}</h2>
+<p class="hint" style="margin-top:0">Built from your statements <em>before</em> this month: the envelope the app would have suggested for <strong>{{ period }}</strong> (for comparison with what you committed).</p>
+<p class="hint" style="font-size:.82rem">Pools: Needs <span class="bucket-needs">R {{ default_503020.needs_pool | format_currency }}</span> · Wants <span class="bucket-wants">R {{ default_503020.wants_pool | format_currency }}</span> · Savings &amp; investments <span class="bucket-savings">R {{ default_503020.savings_pool | format_currency }}</span> · Reference total <strong>R {{ default_503020.reference_total | format_currency }}</strong></p>
+<table><thead><tr><th>Bucket</th><th>Category</th><th>Limit (R)</th></tr></thead><tbody>
+{% for line in default_503020.lines %}<tr>
+<td class="{% if line.bucket == 'needs' %}bucket-needs{% elif line.bucket == 'wants' %}bucket-wants{% else %}bucket-savings{% endif %}">{{ line.bucket }}</td>
+<td>{{ line.category }}</td>
+<td>{{ line.limit | format_currency }}</td>
+</tr>{% endfor %}</tbody></table>
+</div>
+{% elif view_only_month and not default_503020 %}
+<div class="card"><p class="hint" style="margin:0">Not enough imported history to reconstruct the FinSavvy 50/30/20 reference for <strong>{{ period }}</strong>. Your committed lines and score below still apply.</p></div>
+{% endif %}
+
 <div class="card" id="saved-budgets">
-<h2>Saved limits — {{ period }}</h2>
+<h2>{% if view_only_month %}Your committed budget{% else %}Saved limits{% endif %} — {{ period }}</h2>
 {% if budgets %}
-<table><thead><tr><th>Category</th><th>Detail</th><th>Scope</th><th>Limit</th><th></th></tr></thead><tbody>
+<table><thead><tr><th>Category</th><th>Detail</th><th>Scope</th><th>Limit</th>{% if not view_only_month %}<th></th>{% endif %}</tr></thead><tbody>
 {% for b in budgets %}<tr>
 <td>{{ b.category_name }}</td>
 <td>{% if b.other_detail %}{{ b.other_detail }}{% else %}—{% endif %}</td>
 <td>{% if b.bank_account_id %}Account{% else %}All{% endif %}</td>
 <td>R {{ b.amount_limit | format_currency }}</td>
-<td><form method="post" action="/budgets/{{ b.id }}/delete" style="margin:0">
+{% if not view_only_month %}<td><form method="post" action="/budgets/{{ b.id }}/delete" style="margin:0">
 <input type="hidden" name="account_id" value="{{ account_id }}"/>
 <input type="hidden" name="period" value="{{ period }}"/>
 <button type="submit" style="background:#7f1d1d;color:#fecaca;border:none;padding:.25rem .5rem;border-radius:.35rem;cursor:pointer;font-size:.8rem">Remove</button>
-</form></td></tr>{% endfor %}</tbody></table>
+</form></td>{% endif %}</tr>{% endfor %}</tbody></table>
 {% else %}<p style="color:#9ca3af">No rows stored (unexpected after finalize).</p>{% endif %}
 </div>
+{% if not view_only_month %}
 <div class="card" id="custom-budget">
 <h2>Add budget line</h2>
 <p class="hint">Limit: type numbers only (do not include currency symbols). If you pick <strong>Other</strong>, describe it.</p>
@@ -180,6 +213,7 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
 <select name="scope"><option value="account">This account</option><option value="all">All accounts</option></select>
 <button type="submit">Save line</button></form></div>
 {% endif %}
+{% endif %}
 
 {% if finsavvy_payload %}
 <div class="card">
@@ -195,13 +229,24 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
 <span class="fs-score">{{ finsavvy_payload.finsavvy_score }}</span>
 <span class="fs-grade">Grade {{ finsavvy_payload.grade }}</span>
 </div>
+<p class="fs-score-note">The headline number blends three pillar <strong>scores</strong> (each scored 0–100 on its own). The <strong>percentages</strong> are <strong>weights</strong>: they show what share of the headline FinSavvy score comes from each pillar this month{% if finsavvy_payload.has_budgets %} (with a finalized budget, budget discipline is included){% else %} (without a finalized budget, the headline score ignores budget discipline and puts more weight on the other two pillars){% endif %}.</p>
 <div class="fs-subgrid">
-<div class="fs-sub"><label>Budget discipline{% if finsavvy_payload.has_budgets %} ({{ ((finsavvy_payload.weights.budget * 100)|round)|int }}%){% endif %}</label>
+<div class="fs-sub">
+<span class="fs-pillar-title">Budget discipline score</span>
+<span class="fs-weight">Weight in headline score: {% if finsavvy_payload.has_budgets %}{{ ((finsavvy_payload.weights.budget * 100)|round)|int }}%{% else %}0% (pillar inactive){% endif %} — share of the headline number driven by staying within your category limits.</span>
 <strong>{% if finsavvy_payload.components.budget_adherence is not none %}{{ finsavvy_payload.components.budget_adherence }}{% else %}—{% endif %}</strong>
-{% if not finsavvy_payload.has_budgets %}<span class="hint" style="font-size:.75rem;margin:0">Finalize a budget to activate this pillar.</span>{% endif %}
+{% if not finsavvy_payload.has_budgets %}<span class="hint" style="font-size:.75rem;margin:0">Finalize a budget for an open month to activate this pillar.</span>{% endif %}
 </div>
-<div class="fs-sub"><label>Lifestyle &amp; leakage ({{ ((finsavvy_payload.weights.lifestyle * 100)|round)|int }}%)</label><strong>{{ finsavvy_payload.components.lifestyle }}</strong></div>
-<div class="fs-sub"><label>Cash &amp; receipts ({{ ((finsavvy_payload.weights.receipt * 100)|round)|int }}%)</label><strong>{{ finsavvy_payload.components.receipt_coverage }}</strong></div>
+<div class="fs-sub">
+<span class="fs-pillar-title">Lifestyle &amp; leakage score</span>
+<span class="fs-weight">Weight in headline score: {{ ((finsavvy_payload.weights.lifestyle * 100)|round)|int }}% — share from how dining, entertainment, and nightlife compare to your spending pattern.</span>
+<strong>{{ finsavvy_payload.components.lifestyle }}</strong>
+</div>
+<div class="fs-sub">
+<span class="fs-pillar-title">Cash &amp; receipts score</span>
+<span class="fs-weight">Weight in headline score: {{ ((finsavvy_payload.weights.receipt * 100)|round)|int }}% — share from how well uploaded receipts cover ATM-style withdrawals.</span>
+<strong>{{ finsavvy_payload.components.receipt_coverage }}</strong>
+</div>
 </div>
 {% if finsavvy_payload.lifestyle_share_pct is not none %}
 <p class="hint">Lifestyle bucket this month: <strong>R {{ finsavvy_payload.lifestyle_spend | format_currency }}</strong> ≈ <strong>{{ finsavvy_payload.lifestyle_share_pct }}%</strong> of expenses. {{ finsavvy_payload.lifestyle_meta.note }}</p>
@@ -229,21 +274,23 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
 
 <div class="card">
 <h2>Budget history</h2>
-<p class="hint" style="margin-top:0">Pick a year, then a month that has saved limits for this account. You will jump to that month to see limits and compliance.</p>
+<p class="hint" style="margin-top:0">Choose any <strong>year</strong> where you have statements or saved budgets, then a <strong>calendar month</strong>. Past months open in <strong>read-only</strong> view (reference envelope, committed limits, score, and spend vs limits).</p>
+<p class="hint" style="margin-top:.35rem;margin-bottom:.75rem"><a href="/budgets?account_id={{ account_id }}&amp;period={{ current_period_ym }}" style="color:#38bdf8;font-weight:600">Jump to current month ({{ current_period_ym }})</a></p>
 {% if history_years|length > 0 %}
 <form method="get" action="/budgets" class="history-nav">
 <input type="hidden" name="account_id" value="{{ account_id }}"/>
 <label style="margin:0">Year
-<select name="hist_year" onchange="this.form.submit()">{% for y in history_years %}
+<select name="hist_year">{% for y in history_years %}
 <option value="{{ y }}" {% if y == selected_hist_year %}selected{% endif %}>{{ y }}</option>{% endfor %}
 </select></label>
 <label style="margin:0">Month
-<select name="hist_month">{% for m in history_months_for_year %}
-<option value="{{ m }}">{% if m == 1 %}January{% elif m == 2 %}February{% elif m == 3 %}March{% elif m == 4 %}April{% elif m == 5 %}May{% elif m == 6 %}June{% elif m == 7 %}July{% elif m == 8 %}August{% elif m == 9 %}September{% elif m == 10 %}October{% elif m == 11 %}November{% else %}December{% endif %}</option>{% endfor %}
+<select name="hist_month">{% for m in all_history_months %}
+<option value="{{ m }}" {% if selected_hist_month is not none and m == selected_hist_month %}selected{% endif %}>{% if m == 1 %}January{% elif m == 2 %}February{% elif m == 3 %}March{% elif m == 4 %}April{% elif m == 5 %}May{% elif m == 6 %}June{% elif m == 7 %}July{% elif m == 8 %}August{% elif m == 9 %}September{% elif m == 10 %}October{% elif m == 11 %}November{% else %}December{% endif %}{% if m in months_with_saved_budget %} · has budget{% endif %}</option>{% endfor %}
 </select></label>
 <button type="submit">Open month</button>
 </form>
-{% else %}<p class="hint" style="margin-bottom:0">No saved budget months yet.</p>{% endif %}
+<p class="hint" style="font-size:.78rem;margin-bottom:0">Years include any year with transactions on this account or saved budget rows. <span class="month-has-data">· has budget</span> marks months that already have saved limit lines.</p>
+{% else %}<p class="hint" style="margin-bottom:0">No years to show yet — import a statement or save a budget.</p>{% endif %}
 </div>
 
 {% endif %}

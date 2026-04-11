@@ -99,6 +99,43 @@ def _parse_limit_amount(raw: str) -> float | None:
         return max(0.0, float(s.replace(",", "")))
     except ValueError:
         return None
+
+
+def _year_month_tuple(ym: str) -> tuple[int, int] | None:
+    parts = (ym or "").strip().split("-")
+    if len(parts) != 2:
+        return None
+    try:
+        y, m = int(parts[0]), int(parts[1])
+        if m < 1 or m > 12:
+            return None
+        return y, m
+    except ValueError:
+        return None
+
+
+def _is_budget_period_closed(ym: str) -> bool:
+    """True when the budget month is strictly before the current calendar month (read-only)."""
+    t = _year_month_tuple(ym)
+    if not t:
+        return False
+    cy, cm = date.today().year, date.today().month
+    return t < (cy, cm)
+
+
+def _reject_closed_budget_month(
+    request: Request, *, account_id: int, year_month: str
+) -> RedirectResponse | None:
+    ym = year_month.strip()
+    if not _is_budget_period_closed(ym):
+        return None
+    request.session["budget_error"] = (
+        "That calendar month has ended. This screen is read-only for past months — "
+        "use “Jump to current month” in Budget history or pick an open month."
+    )
+    return RedirectResponse(url=f"/budgets?account_id={account_id}&period={ym}", status_code=303)
+
+
 UPLOAD_RECEIPTS_DIR = os.path.join(BASE_DIR, "uploads", "receipts")
 UPLOAD_PAYSLIPS_DIR = os.path.join(BASE_DIR, "uploads", "payslips")
 
@@ -1402,8 +1439,12 @@ def budgets_page(
                 "needs_budget_attention": False,
                 "budget_nag": False,
                 "history_years": [],
-                "history_months_for_year": [],
+                "all_history_months": list(range(1, 13)),
+                "months_with_saved_budget": [],
                 "selected_hist_year": None,
+                "selected_hist_month": None,
+                "view_only_month": False,
+                "current_period_ym": f"{date.today().year}-{date.today().month:02d}",
             },
         )
     if account_id is None:
@@ -1430,15 +1471,22 @@ def budgets_page(
     budgets = crud.list_budgets_for_user(db, user_id, period, bank_account_id=account_id)
     finalized = crud.is_month_budget_finalized(db, user_id=user_id, year_month=period, bank_account_id=account_id)
     default_503020 = budget_503020.build_default_month_budget(db, account_id, period)
+    ymt = _year_month_tuple(period)
+    cy, cm = date.today().year, date.today().month
+    view_only_month = bool(ymt and ymt < (cy, cm))
     budget_mode = (request.query_params.get("budget_mode") or "").strip().lower()
-    if budget_mode == "customize" and default_503020 and not finalized:
+    if view_only_month:
+        budget_mode = ""
+    if budget_mode == "customize" and default_503020 and not finalized and not view_only_month:
         request.session[_budget_baseline_session_key(user_id, period, account_id)] = json.dumps(
             {"lines": [{"category": r["category"], "limit": float(r["limit"])} for r in default_503020["lines"]]}
         )
-    customize_editing = bool(budget_mode == "customize" and default_503020 and not finalized)
-    scratch_editing = bool(budget_mode == "scratch" and not finalized)
+    customize_editing = bool(
+        budget_mode == "customize" and default_503020 and not finalized and not view_only_month
+    )
+    scratch_editing = bool(budget_mode == "scratch" and not finalized and not view_only_month)
     today_ym = f"{date.today().year}-{date.today().month:02d}"
-    needs_budget_attention = (period == today_ym) and (not finalized)
+    needs_budget_attention = (period == today_ym) and (not finalized) and (not view_only_month)
     budget_nag = request.query_params.get("budget_nag") == "1"
     budget_error = request.session.pop("budget_error", None)
 
@@ -1455,19 +1503,23 @@ def budgets_page(
         db, user_id=user_id, account_id=account_id, year_month=period
     )
 
-    history_years = crud.list_distinct_budget_years_for_account(db, user_id, account_id)
-    selected_hist_year: int | None = None
-    history_months_for_year: list[int] = []
+    history_years = crud.list_history_years_for_budget_navigation(db, user_id, account_id)
+    all_history_months = list(range(1, 13))
+    selected_hist_year: int
     if hy and hy.isdigit():
         selected_hist_year = int(hy)
-        history_months_for_year = crud.list_budget_months_numeric_for_year(
-            db, user_id, account_id, selected_hist_year
-        )
+    elif ymt:
+        selected_hist_year = ymt[0]
     elif history_years:
         selected_hist_year = history_years[0]
-        history_months_for_year = crud.list_budget_months_numeric_for_year(
-            db, user_id, account_id, selected_hist_year
-        )
+    else:
+        selected_hist_year = cy
+    months_with_saved_budget = set(
+        crud.list_budget_months_numeric_for_year(db, user_id, account_id, selected_hist_year)
+    )
+    selected_hist_month: int | None = None
+    if ymt and ymt[0] == selected_hist_year:
+        selected_hist_month = ymt[1]
 
     return templates.TemplateResponse(
         "budgets.html",
@@ -1490,8 +1542,12 @@ def budgets_page(
             "needs_budget_attention": needs_budget_attention,
             "budget_nag": budget_nag,
             "history_years": history_years,
-            "history_months_for_year": history_months_for_year,
+            "all_history_months": all_history_months,
+            "months_with_saved_budget": sorted(months_with_saved_budget),
             "selected_hist_year": selected_hist_year,
+            "selected_hist_month": selected_hist_month,
+            "view_only_month": view_only_month,
+            "current_period_ym": today_ym,
         },
     )
 
@@ -1510,15 +1566,18 @@ def budgets_recommendations_accept(
         return RedirectResponse(url="/login", status_code=303)
     if not crud.get_bank_account_for_user(db, account_id, user_id):
         return RedirectResponse(url="/budgets", status_code=303)
+    ym = year_month.strip()
+    blocked = _reject_closed_budget_month(request, account_id=account_id, year_month=ym)
+    if blocked:
+        return blocked
     bank_scope = None if scope.strip().lower() == "all" else account_id
     budget_recommendations.apply_recommendations(
         db,
         user_id=user_id,
         account_id=account_id,
-        year_month=year_month.strip(),
+        year_month=ym,
         bank_account_id=bank_scope,
     )
-    ym = year_month.strip()
     sk = "global" if scope.strip().lower() == "all" else f"acc:{account_id}"
     crud.upsert_budget_provenance(db, user_id, ym, sk, "recommended")
     return RedirectResponse(
@@ -1541,15 +1600,18 @@ def budgets_recommendations_accept_custom(
         return RedirectResponse(url="/login", status_code=303)
     if not crud.get_bank_account_for_user(db, account_id, user_id):
         return RedirectResponse(url="/budgets", status_code=303)
+    ym = year_month.strip()
+    blocked = _reject_closed_budget_month(request, account_id=account_id, year_month=ym)
+    if blocked:
+        return blocked
     bank_scope = None if scope.strip().lower() == "all" else account_id
     budget_recommendations.apply_recommendations(
         db,
         user_id=user_id,
         account_id=account_id,
-        year_month=year_month.strip(),
+        year_month=ym,
         bank_account_id=bank_scope,
     )
-    ym = year_month.strip()
     sk = "global" if scope.strip().lower() == "all" else f"acc:{account_id}"
     crud.upsert_budget_provenance(db, user_id, ym, sk, "recommended_custom")
     return RedirectResponse(
@@ -1573,6 +1635,9 @@ def budgets_recommendations_decline(
     if not crud.get_bank_account_for_user(db, account_id, user_id):
         return RedirectResponse(url="/budgets", status_code=303)
     ym = year_month.strip()
+    blocked = _reject_closed_budget_month(request, account_id=account_id, year_month=ym)
+    if blocked:
+        return blocked
     request.session[f"budgethide:{account_id}:{ym}"] = "1"
     sk = "global" if scope.strip().lower() == "all" else f"acc:{account_id}"
     crud.upsert_budget_provenance(db, user_id, ym, sk, "declined")
@@ -1601,6 +1666,9 @@ def budgets_save(
         return RedirectResponse(url="/budgets", status_code=303)
     bank_scope = None if scope == "all" else account_id
     ym = year_month.strip()
+    blocked = _reject_closed_budget_month(request, account_id=account_id, year_month=ym)
+    if blocked:
+        return blocked
     cat = category_name.strip()
     amt = _parse_limit_amount(amount_limit)
     if amt is None:
@@ -1636,6 +1704,9 @@ def budgets_delete(
     user = request.session.get("user")
     if not user or user_id is None:
         return RedirectResponse(url="/login", status_code=303)
+    blocked = _reject_closed_budget_month(request, account_id=account_id, year_month=period.strip())
+    if blocked:
+        return blocked
     crud.delete_monthly_budget(db, budget_id, user_id)
     return RedirectResponse(url=f"/budgets?account_id={account_id}&period={period}", status_code=303)
 
@@ -1654,6 +1725,9 @@ def budgets_commit_system(
     if not crud.get_bank_account_for_user(db, account_id, user_id):
         return RedirectResponse(url="/budgets", status_code=303)
     ym = year_month.strip()
+    blocked = _reject_closed_budget_month(request, account_id=account_id, year_month=ym)
+    if blocked:
+        return blocked
     payload = budget_503020.build_default_month_budget(db, account_id, ym)
     if not payload or not payload.get("lines"):
         request.session["budget_error"] = "Not enough statement history to build the recommended budget. Upload more months or use custom budget from scratch."
@@ -1699,6 +1773,9 @@ async def budgets_commit_customized(
     if not crud.get_bank_account_for_user(db, account_id, user_id):
         return RedirectResponse(url="/budgets", status_code=303)
     ym = year_month.strip()
+    blocked = _reject_closed_budget_month(request, account_id=account_id, year_month=ym)
+    if blocked:
+        return blocked
     sk = f"acc:{account_id}"
     key = _budget_baseline_session_key(user_id, ym, account_id)
     raw = request.session.get(key)
@@ -1770,6 +1847,9 @@ async def budgets_commit_scratch(
     if not crud.get_bank_account_for_user(db, account_id, user_id):
         return RedirectResponse(url="/budgets", status_code=303)
     ym = year_month.strip()
+    blocked = _reject_closed_budget_month(request, account_id=account_id, year_month=ym)
+    if blocked:
+        return blocked
     sk = f"acc:{account_id}"
     form = await request.form()
     cats = form.getlist("scratch_cat")
