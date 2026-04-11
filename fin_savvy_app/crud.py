@@ -403,6 +403,18 @@ def get_available_months(db: Session, account_id: int) -> list[tuple[int, int]]:
     return sorted(merged, reverse=True)
 
 
+def list_distinct_budget_months_for_user(db: Session, user_id: int, limit: int = 36) -> list[str]:
+    """YYYY-MM values that have at least one saved budget row (newest first)."""
+    rows = (
+        db.query(models.MonthlyBudget.year_month)
+        .filter(models.MonthlyBudget.user_id == user_id)
+        .distinct()
+        .all()
+    )
+    labels = sorted({str(r[0]) for r in rows if r[0]}, reverse=True)
+    return labels[:limit]
+
+
 def list_budgets_for_user(
     db: Session,
     user_id: int,

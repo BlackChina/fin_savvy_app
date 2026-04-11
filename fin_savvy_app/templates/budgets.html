@@ -21,6 +21,17 @@ th,td{padding:.5rem;text-align:left;border-bottom:1px solid #1f2937}
 .rec-accept-custom{background:#0f172a;color:#e2e8f0;border:1px solid #334155!important}
 .rec-decline{background:transparent;color:#94a3b8;border:1px solid #475569!important}
 .ok-banner{border:1px solid #166534;background:rgba(22,101,52,.15);color:#86efac;padding:.75rem 1rem;border-radius:.5rem;margin-bottom:1rem;font-size:.88rem}
+.fs-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:1rem;margin-bottom:1rem}
+.fs-score{font-size:2.75rem;font-weight:800;letter-spacing:-.03em;background:linear-gradient(135deg,#38bdf8,#22c55e);-webkit-background-clip:text;background-clip:text;color:transparent}
+.fs-grade{font-size:1.25rem;color:#94a3b8;font-weight:600}
+.fs-subgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:.65rem;margin:1rem 0}
+.fs-sub{border:1px solid #334155;border-radius:.5rem;padding:.6rem .75rem;background:rgba(15,23,42,.5)}
+.fs-sub label{display:block;font-size:.72rem;color:#64748b;margin:0 0 .2rem}
+.fs-sub strong{font-size:1.05rem;color:#e2e8f0}
+.status-ok{color:#4ade80}.status-warn{color:#fbbf24}.status-bad{color:#f87171}
+details.fs-how{margin-top:1rem;border:1px solid #334155;border-radius:.5rem;padding:.5rem .75rem;background:rgba(2,6,23,.35)}
+details.fs-how summary{cursor:pointer;color:#94a3b8;font-size:.88rem}
+details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.45}
 </style>
 <link rel="stylesheet" href="/static/app-chrome.css" />
 <link rel="stylesheet" href="/static/finsavvy_background.css" />
@@ -94,9 +105,11 @@ th,td{padding:.5rem;text-align:left;border-bottom:1px solid #1f2937}
 <select name="account_id" onchange="this.form.submit()">{% for acc in accounts %}
 <option value="{{ acc.id }}" {% if acc.id == account_id %}selected{% endif %}>{{ acc.name }}</option>{% endfor %}
 </select></div>
-<div style="flex:1;min-width:140px"><label>Month</label>
-<input type="text" name="period" value="{{ period }}" pattern="\d{4}-\d{2}"/></div>
+<div style="flex:1;min-width:140px"><label>Month (YYYY-MM)</label>
+<input type="text" name="period" value="{{ period }}" pattern="\d{4}-\d{2}" list="period-choices" autocomplete="off" placeholder="2026-03"/></div>
 <button type="submit">Load</button></form>
+{% if period_choices|length > 0 %}<datalist id="period-choices">{% for p in period_choices %}<option value="{{ p }}"/>{% endfor %}</datalist>{% endif %}
+<p class="hint" style="margin-top:0">Each month has <strong>its own</strong> budget limits and FinSavvy score. Change the month to review past budgets, adherence, and how your score moved over time.</p>
 <form method="post" action="/budgets">
 <input type="hidden" name="account_id" value="{{ account_id }}"/>
 <input type="hidden" name="year_month" value="{{ period }}"/>
@@ -119,6 +132,45 @@ th,td{padding:.5rem;text-align:left;border-bottom:1px solid #1f2937}
 <input type="hidden" name="period" value="{{ period }}"/>
 <button type="submit" style="background:#7f1d1d;color:#fecaca;border:none;padding:.25rem .5rem;border-radius:.35rem;cursor:pointer;font-size:.8rem">Remove</button>
 </form></td></tr>{% endfor %}</tbody></table>
-{% else %}<p style="color:#9ca3af">No budgets.</p>{% endif %}</div>
+{% else %}<p style="color:#9ca3af">No budgets saved for this month yet.</p>{% endif %}</div>
+{% if finsavvy_payload %}
+<div class="card">
+<h2>FinSavvy score — {{ finsavvy_payload.year_month }}</h2>
+<p class="hint" style="margin-top:0">Calendar month <strong>{{ finsavvy_payload.period_start }}</strong> to <strong>{{ finsavvy_payload.period_end }}</strong>. Spending is taken from this account’s transactions; receipts are all receipts you uploaded in that month (same rule as the dashboard).</p>
+<div class="fs-head">
+<span class="fs-score">{{ finsavvy_payload.finsavvy_score }}</span>
+<span class="fs-grade">Grade {{ finsavvy_payload.grade }}</span>
+</div>
+<div class="fs-subgrid">
+<div class="fs-sub"><label>Budget discipline{% if finsavvy_payload.has_budgets %} ({{ ((finsavvy_payload.weights.budget * 100)|round)|int }}%){% endif %}</label>
+<strong>{% if finsavvy_payload.components.budget_adherence is not none %}{{ finsavvy_payload.components.budget_adherence }}{% else %}—{% endif %}</strong>
+{% if not finsavvy_payload.has_budgets %}<span class="hint" style="font-size:.75rem;margin:0">Set limits to activate this pillar.</span>{% endif %}
+</div>
+<div class="fs-sub"><label>Lifestyle &amp; leakage ({{ ((finsavvy_payload.weights.lifestyle * 100)|round)|int }}%)</label><strong>{{ finsavvy_payload.components.lifestyle }}</strong></div>
+<div class="fs-sub"><label>Cash &amp; receipts ({{ ((finsavvy_payload.weights.receipt * 100)|round)|int }}%)</label><strong>{{ finsavvy_payload.components.receipt_coverage }}</strong></div>
+</div>
+{% if finsavvy_payload.lifestyle_share_pct is not none %}
+<p class="hint">Lifestyle bucket (dining + entertainment + alcohol &amp; nightlife) this month: <strong>R {{ finsavvy_payload.lifestyle_spend | format_currency }}</strong> ≈ <strong>{{ finsavvy_payload.lifestyle_share_pct }}%</strong> of expenses. {{ finsavvy_payload.lifestyle_meta.note }}</p>
+{% endif %}
+<p class="hint">Cash withdrawals (this account): <strong>R {{ finsavvy_payload.receipt_meta.cash_withdrawn | format_currency }}</strong> · Receipts uploaded: <strong>R {{ finsavvy_payload.receipt_meta.receipts_total | format_currency }}</strong>{% if finsavvy_payload.receipt_meta.coverage_pct is not none %} ({{ finsavvy_payload.receipt_meta.coverage_pct }}% of cash){% endif %}. {{ finsavvy_payload.receipt_meta.note }}</p>
+{% if finsavvy_payload.has_budgets and finsavvy_payload.budget_rows|length > 0 %}
+<h3 style="margin:1.25rem 0 .5rem;font-size:1rem;color:#cbd5e1">Budget vs actual (adherence)</h3>
+<table><thead><tr><th>Category</th><th>Limit</th><th>Spent</th><th>Remaining</th><th>Util %</th><th>Line score</th></tr></thead><tbody>
+{% for row in finsavvy_payload.budget_rows %}<tr>
+<td>{{ row.category }}</td>
+<td>R {{ row.limit | format_currency }}</td>
+<td>R {{ row.spent | format_currency }}</td>
+<td class="{% if row.remaining >= 0 %}status-ok{% else %}status-bad{% endif %}">R {{ row.remaining | format_currency }}</td>
+<td>{{ row.utilization_pct }}%</td>
+<td>{{ row.category_score }}</td>
+</tr>{% endfor %}</tbody></table>
+{% endif %}
+<h3 style="margin:1.25rem 0 .5rem;font-size:1rem;color:#cbd5e1">Areas to work on</h3>
+<ul style="margin:0;padding-left:1.2rem;color:#9ca3af;font-size:.88rem;line-height:1.5">{% for tip in finsavvy_payload.improvements %}<li>{{ tip }}</li>{% endfor %}</ul>
+<details class="fs-how"><summary>How this score is calculated</summary>
+{% for block in finsavvy_payload.transparency %}<p><strong style="color:#cbd5e1">{{ block.title }}</strong><br/>{{ block.body }}</p>{% endfor %}
+</details>
+</div>
+{% endif %}
 {% endif %}
 </main></body></html>

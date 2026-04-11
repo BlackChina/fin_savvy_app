@@ -24,7 +24,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from . import alerts, auth, budget_recommendations, classifier, crud, csv_parser, insights, models, pdf_parser, receipt_ocr, schemas, tax_calc
+from . import alerts, auth, budget_recommendations, classifier, crud, csv_parser, finsavvy_score, insights, models, pdf_parser, receipt_ocr, schemas, tax_calc
 from .database import SessionLocal, init_db
 from .extract_finsavvy_html_assets import sync_poster_pngs_from_background_html
 
@@ -1356,6 +1356,8 @@ def budgets_page(
                 "recommendation_prior_months": [],
                 "hide_recommendations": False,
                 "customize_hint": False,
+                "period_choices": [],
+                "finsavvy_payload": None,
             },
         )
     if account_id is None:
@@ -1383,6 +1385,15 @@ def budgets_page(
     rec_payload = budget_recommendations.compute_recommendations(db, account_id, period)
     customize_hint = request.query_params.get("customize") == "1"
 
+    budget_month_labels = crud.list_distinct_budget_months_for_user(db, user_id)
+    avail_months = crud.get_available_months(db, account_id)
+    avail_labels = [f"{y}-{m:02d}" for y, m in avail_months]
+    period_choices = sorted(set(budget_month_labels) | set(avail_labels), reverse=True)[:40]
+
+    fs_payload = finsavvy_score.compute_month_score_payload(
+        db, user_id=user_id, account_id=account_id, year_month=period
+    )
+
     return templates.TemplateResponse(
         "budgets.html",
         {
@@ -1399,6 +1410,8 @@ def budgets_page(
             "recommendation_prior_months": rec_payload["prior_months_used"],
             "hide_recommendations": hide_recommendations,
             "customize_hint": customize_hint,
+            "period_choices": period_choices,
+            "finsavvy_payload": fs_payload,
         },
     )
 
