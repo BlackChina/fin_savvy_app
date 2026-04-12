@@ -258,7 +258,7 @@ def build_default_month_budget(
 
     prior_y, prior_m = (y - 1, 12) if m == 1 else (y, m - 1)
     prior_income = float(crud.sum_income_for_account_calendar_month(db, account_id, prior_y, prior_m))
-    min_carry = _min_monthly_carryover_amount()
+    min_carry = min_monthly_carryover_default()
     use_prior_income = prior_income >= 100.0
     if use_prior_income:
         envelope_income = max(0.0, prior_income - min_carry)
