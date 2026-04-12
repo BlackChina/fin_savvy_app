@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import Any
 
 
@@ -25,6 +26,55 @@ def _row_key(category: str, other_detail: str | None) -> str:
         od = (other_detail or "").strip().lower()
         return f"other::{od}"
     return f"cat::{c.lower()}"
+
+
+def duplicate_budget_lines_user_message(submitted: list[dict[str, Any]]) -> str:
+    """
+    Explain which rows clash when two lines share the same category (or two Other lines share the same label).
+    """
+    groups: dict[str, list[str]] = defaultdict(list)
+    for r in submitted:
+        cat = str(r.get("category") or "").strip()
+        if not cat:
+            continue
+        od_raw = str(r.get("other_detail") or "").strip()[:120]
+        od: str | None = od_raw if cat.lower() == "other" else None
+        if cat.lower() == "other" and not od:
+            continue
+        k = _row_key(cat, od)
+        if cat.lower() == "other":
+            label = od or ""
+            groups[k].append(f'Other ("{label}")')
+        else:
+            groups[k].append(cat)
+
+    dup_blocks: list[str] = []
+    for k, labels in sorted(groups.items(), key=lambda kv: kv[0]):
+        if len(labels) < 2:
+            continue
+        display = labels[0]
+        n = len(labels)
+        if k.startswith("other::"):
+            dup_blocks.append(
+                f"• {display}: {n} rows share this same Other label. Merge the amounts into one row, "
+                "or type a different label on the extra row so each Other line is distinct."
+            )
+        else:
+            dup_blocks.append(
+                f"• {display}: {n} rows list this category. Keep one row (merge limits into a single total if needed) "
+                "or change one row to a different category."
+            )
+
+    if not dup_blocks:
+        return (
+            'Two or more lines use the same category, or two "Other" lines use the same label. '
+            "Each category is stored once; each Other label is stored once."
+        )
+
+    return (
+        "We could not save this budget because the same line appears more than once:\n\n"
+        + "\n".join(dup_blocks)
+    )
 
 
 def max_add_or_remove_lines(baseline_line_count: int, *, max_line_change_ratio: float = 0.40) -> int:
@@ -76,7 +126,7 @@ def validate_customized_503020_flexible(
             return 'For category "Other", enter what this line covers (your custom label).'
         k = _row_key(cat, od)
         if k in sub_map:
-            return "Each budget line must be unique — merge duplicate categories or use different Other labels."
+            return duplicate_budget_lines_user_message(submitted)
         sub_map[k] = float(r["limit"])
 
     if not sub_map:

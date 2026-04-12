@@ -20,7 +20,7 @@ th,td{padding:.5rem;text-align:left;border-bottom:1px solid #1f2937}
 .budget-actions a,.budget-actions button{font-size:.85rem}
 .btn-secondary{padding:.5rem .85rem;border-radius:.5rem;background:#0f172a;color:#e2e8f0;border:1px solid #334155;text-decoration:none;display:inline-block}
 .btn-ghost{padding:.5rem .85rem;border-radius:.5rem;background:transparent;color:#94a3b8;border:1px solid #475569;text-decoration:none;display:inline-block}
-.err-banner{border:1px solid #991b1b;background:#3f0d12;color:#fecdd3;padding:1rem 1.2rem;border-radius:.65rem;margin-bottom:1.25rem;font-size:.9rem;line-height:1.55;box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
+.err-banner{border:1px solid #991b1b;background:#3f0d12;color:#fecdd3;padding:1rem 1.2rem;border-radius:.65rem;margin-bottom:1.25rem;font-size:.9rem;line-height:1.55;box-shadow:inset 0 1px 0 rgba(255,255,255,.06);white-space:pre-line}
 .err-banner strong{color:#fff;font-weight:600}
 .btn-row-del{width:2.35rem;height:2.35rem;padding:0;border-radius:.45rem;border:1px solid #7f1d1d;background:rgba(69,10,10,.6);color:#fecaca;cursor:pointer;font-size:1.15rem;line-height:1;font-weight:700;flex-shrink:0}
 .btn-row-del:hover{background:rgba(127,29,29,.45)}
@@ -36,7 +36,8 @@ th,td{padding:.5rem;text-align:left;border-bottom:1px solid #1f2937}
 .card--readonly-banner{border-color:#475569;background:linear-gradient(180deg,#1e293b,#0f172a);color:#e2e8f0}
 .card--readonly-banner p{margin:0;font-size:.92rem;line-height:1.55;color:#e2e8f0}
 .card--readonly-banner strong{color:#f8fafc}
-.col-other{font-size:.72rem;color:#64748b;font-weight:500}
+.col-other{font-size:.72rem;color:#64748b;font-weight:500;min-width:11rem;width:22%}
+.budget-other-input{min-width:11rem;width:100%;max-width:26rem;box-sizing:border-box}
 .fs-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:1rem;margin-bottom:1rem}
 .fs-score{font-size:2.75rem;font-weight:800;letter-spacing:-.03em;background:linear-gradient(135deg,#38bdf8,#22c55e);-webkit-background-clip:text;background-clip:text;color:transparent}
 .fs-grade{font-size:1.25rem;color:#94a3b8;font-weight:600}
@@ -66,13 +67,30 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
 .split-badge--neutral{color:#94a3b8;border:1px solid #475569;background:rgba(30,41,59,.5)}
 .card--budget-nav{margin-bottom:1.25rem}
 .budget-nav-form{display:flex;flex-direction:column;gap:1rem}
-.budget-nav-structure{display:flex;flex-wrap:wrap;gap:1rem 1.5rem;padding:.65rem 0;border-bottom:1px solid #1f2937;margin-bottom:.25rem}
-.budget-nav-structure label{display:inline-flex;align-items:center;gap:.45rem;font-size:.86rem;color:#e2e8f0;cursor:pointer;margin:0}
-.budget-nav-structure input{margin:0}
+.budget-nav-fieldset{border:0;padding:0;margin:0 0 .25rem;min-width:0}
+.budget-view-legend{margin:0 0 .55rem;font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#64748b}
+.budget-view-toggle{display:grid;grid-template-columns:1fr 1fr;gap:0;border-radius:.75rem;overflow:hidden;border:1px solid #334155;background:linear-gradient(180deg,#0c1222,#0f172a);box-shadow:0 4px 24px rgba(0,0,0,.25)}
+.budget-view-option{position:relative;display:block;margin:0;padding:1rem 1.1rem 1.05rem;cursor:pointer;text-align:left;border-right:1px solid #1e293b;transition:background .2s ease,box-shadow .2s ease}
+.budget-view-option:last-child{border-right:0}
+.budget-view-option:hover{background:rgba(30,41,59,.45)}
+.budget-view-option--selected{background:linear-gradient(145deg,rgba(34,197,94,.14),rgba(14,165,233,.12));box-shadow:inset 0 0 0 1px rgba(56,189,248,.45),inset 0 -2px 0 rgba(34,197,94,.35)}
+.budget-view-option:focus-within{outline:2px solid #38bdf8;outline-offset:2px;z-index:1}
+.budget-view-option input{position:absolute;opacity:0;width:1px;height:1px;clip:rect(0,0,0,0)}
+.budget-view-option__title{display:block;font-size:.95rem;font-weight:600;color:#f8fafc;letter-spacing:-.02em;margin-bottom:.35rem}
+.budget-view-option__sub{display:block;font-size:.75rem;color:#94a3b8;line-height:1.45;max-width:16rem}
+.budget-view-option--selected .budget-view-option__title{color:#f0fdf4}
+.budget-view-option--selected .budget-view-option__sub{color:#a5f3fc}
+@media (max-width:520px){
+.budget-view-toggle{grid-template-columns:1fr}
+.budget-view-option{border-right:0;border-bottom:1px solid #1e293b}
+.budget-view-option:last-child{border-bottom:0}
+.budget-view-option__sub{max-width:none}
+}
 .budget-nav-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));gap:.75rem 1rem;align-items:end}
 .budget-nav-grid label{margin-bottom:.25rem}
 .budget-nav-grid select,.budget-nav-grid input{margin-bottom:0}
 .budget-nav-actions{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin-top:.15rem}
+.budget-nav-form.is-applying-view .budget-view-toggle{opacity:.62;pointer-events:none;transition:opacity .12s ease}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 </style>
 <link rel="stylesheet" href="/static/app-chrome.css" />
@@ -120,21 +138,31 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
 {% for c in categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
 </select></td>
 <td><input type="text" name="line_limit" inputmode="decimal" placeholder="0" style="margin-bottom:0"/></td>
-<td data-budget-other-wrap style="display:none"><input type="text" name="line_other" data-budget-other-input placeholder="Label if Other" style="margin-bottom:0"/></td>
+<td data-budget-other-wrap style="display:none"><input type="text" name="line_other" class="budget-other-input" data-budget-other-input placeholder="Label if Other" style="margin-bottom:0"/></td>
 <td style="vertical-align:middle;width:3rem"><button type="button" class="btn-row-del" title="Remove this line">−</button></td>
 </tr>
 </template>
 
 <div class="card card--budget-nav">
 <h2>Budget setup &amp; history</h2>
-<form method="get" action="/budgets" class="budget-nav-form">
+<form method="get" action="/budgets" id="budget-nav-form" class="budget-nav-form" aria-describedby="budget-view-hint">
 {% if budget_mode_query %}<input type="hidden" name="budget_mode" value="{{ budget_mode_query }}"/>{% endif %}
-<fieldset class="budget-nav-structure">
-<legend class="sr-only">Budget layout</legend>
-<label><input type="radio" name="budget_view" value="per_account" {% if budget_view != 'combined' %}checked{% endif %}/> One account at a time</label>
-<label><input type="radio" name="budget_view" value="combined" {% if budget_view == 'combined' %}checked{% endif %}/> All limits on one screen</label>
+<fieldset class="budget-nav-fieldset">
+<p class="budget-view-legend" id="budget-view-legend">View</p>
+<div class="budget-view-toggle" role="radiogroup" aria-labelledby="budget-view-legend">
+<label class="budget-view-option{% if budget_view != 'combined' %} budget-view-option--selected{% endif %}">
+<input type="radio" name="budget_view" value="per_account" {% if budget_view != 'combined' %}checked{% endif %}/>
+<span class="budget-view-option__title">Each account</span>
+<span class="budget-view-option__sub">Limits for the linked account you pick below—one account’s table at a time.</span>
+</label>
+<label class="budget-view-option{% if budget_view == 'combined' %} budget-view-option--selected{% endif %}">
+<input type="radio" name="budget_view" value="combined" {% if budget_view == 'combined' %}checked{% endif %}/>
+<span class="budget-view-option__title">Full month list</span>
+<span class="budget-view-option__sub">Every saved limit line for this calendar month, across all your linked accounts, in one table.</span>
+</label>
+</div>
 </fieldset>
-<p class="hint" style="margin:0 0 .5rem;font-size:.8rem">Pick an account below, then load a month. <strong>One account at a time</strong> is the usual workflow (each bank account has its own limits). <strong>All limits on one screen</strong> lists every saved line for that month together—useful when you use several accounts in one month. The suggested envelope and FinSavvy score always follow the account you select here.</p>
+<p class="hint" id="budget-view-hint" style="margin:0;font-size:.8rem"><strong>View</strong> reloads the page as soon as you pick it (same month and account). Change <strong>Account</strong> or the month, then press <strong>Load month</strong>. The suggested budget and FinSavvy score always follow the account you select—only the table layout changes.</p>
 <div class="budget-nav-grid">
 <div><label for="budget-nav-account">{% if budget_view == 'combined' %}Account for income &amp; score{% else %}Account{% endif %}</label>
 <select name="account_id" id="budget-nav-account">{% for acc in accounts %}
@@ -182,7 +210,7 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
 {% elif not view_only_month and not budget_finalized and default_503020 %}
 <div class="card" id="unified-budget">
 {% if budget_view == 'combined' %}
-<p class="hint" style="margin-top:0;margin-bottom:.75rem;font-size:.82rem;color:#a5b4fc">You’re viewing <strong>every</strong> limit line for <strong>{{ period }}</strong>. The suggested budget and FinSavvy score still use the <strong>account</strong> you picked in the bar above.</p>
+<p class="hint" style="margin-top:0;margin-bottom:.75rem;font-size:.82rem;color:#a5b4fc"><strong>Full month list</strong> is on: every saved limit line for <strong>{{ period }}</strong> from <strong>all linked accounts</strong> appears below. The suggested envelope and FinSavvy score still follow the <strong>account</strong> you chose in Account.</p>
 {% endif %}
 <h2>FinSavvy suggested budget (50 / 30 / 20)</h2>
 <p class="hint" style="margin-top:0">{{ default_503020.rule_note }}{% if default_503020.prior_month_income %} Last month’s income (dashboard basis): <strong>R {{ default_503020.prior_month_income | format_currency }}</strong> · Minimum carry-over reserved: <strong>R {{ default_503020.min_monthly_carryover | format_currency }}</strong> · 50/30/20 on about <strong>R {{ default_503020.allocatable_for_502020 | format_currency }}</strong> · Suggested line total: <strong>R {{ default_503020.reference_total | format_currency }}</strong>.{% else %} Estimated income baseline: <strong>R {{ default_503020.income_estimate | format_currency }}</strong> · Suggested total limits: <strong>R {{ default_503020.reference_total | format_currency }}</strong>.{% endif %}</p>
@@ -205,12 +233,13 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
 {% for c in categories %}<option value="{{ c }}" {% if row.category == c %}selected{% endif %}>{{ c }}</option>{% endfor %}
 </select></td>
 <td><input type="text" name="line_limit" value="{% if row.limit != '' and row.limit is not none %}{{ row.limit }}{% endif %}" inputmode="decimal" placeholder="0" style="margin-bottom:0"/></td>
-<td data-budget-other-wrap style="display:none"><input type="text" name="line_other" data-budget-other-input placeholder="Label if Other" style="margin-bottom:0"/></td>
+<td data-budget-other-wrap style="{% if (row.category | default('', true) | lower) == 'other' %}display:table-cell{% else %}display:none{% endif %}"><input type="text" name="line_other" class="budget-other-input" data-budget-other-input placeholder="Label if Other" value="{{ row.other_detail or '' }}" style="margin-bottom:0"/></td>
 <td style="vertical-align:middle;width:3rem"><button type="button" class="btn-row-del" title="Remove this line">−</button></td>
 </tr>{% endfor %}
 </tbody></table>
 {% if customize_edit_caps %}
 <p class="hint" style="font-size:.8rem">You may <strong>remove</strong> at most {{ customize_edit_caps.max_remove_or_add }} of the {{ customize_edit_caps.baseline_line_count }} suggested lines and <strong>add</strong> at most {{ customize_edit_caps.max_remove_or_add }} new lines (40% each way). You can change limits on lines you keep freely. The <strong>sum of all limits</strong> must be at least <strong>75%</strong> of the suggested total (R {{ default_503020.reference_total | format_currency }}) and at most the <strong>lower of 125% of that total and last month’s income</strong>{% if default_503020.prior_month_income %} (R {{ default_503020.prior_month_income | format_currency }} in {{ default_503020.prior_month_for_income }}){% endif %}.</p>
+<p class="hint" style="font-size:.78rem">If save fails, your rows stay as you left them so you can read the message, fix the issue, and try <strong>Create budget (customized)</strong> again.</p>
 {% endif %}
 {% if default_503020.prior_month_income and carryover_prev_streak > 0 and carryover_prev_streak < 3 %}
 <p class="hint" style="font-size:.78rem;color:#fde68a">Carry-over target: we aim for at least <strong>R {{ min_carry_for_budget_ui | format_currency }}</strong> left after limits vs last month’s income. You’ve had <strong>{{ carryover_prev_streak }}</strong> consecutive month(s) below that — after <strong>three</strong>, the next month you’ll need to meet the target to save your budget.</p>
@@ -315,7 +344,7 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
 <input type="text" name="amount_limit" inputmode="decimal" required placeholder="e.g. 2500"/>
 <div data-budget-other-wrap id="add-line-other-wrap" style="display:none">
 <label>Label (only for Other)</label>
-<input type="text" name="other_detail" data-budget-other-input placeholder="e.g. School fees"/>
+<input type="text" name="other_detail" class="budget-other-input" data-budget-other-input placeholder="e.g. School fees"/>
 </div>
 <label>Scope</label>
 <select name="scope"><option value="account">This account</option><option value="all">All accounts</option></select>
@@ -383,6 +412,26 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
 {% endif %}
 <script>
 (function(){
+  var viewToggle = document.querySelector(".budget-view-toggle");
+  if (viewToggle) {
+    function syncBudgetViewSelected(){
+      viewToggle.querySelectorAll(".budget-view-option").forEach(function(lab){
+        var inp = lab.querySelector("input[type=radio][name=budget_view]");
+        lab.classList.toggle("budget-view-option--selected", inp && inp.checked);
+      });
+    }
+    viewToggle.addEventListener("change", function(ev){
+      var t = ev.target;
+      syncBudgetViewSelected();
+      if (!t || t.name !== "budget_view" || t.type !== "radio") return;
+      var navForm = t.form;
+      if (!navForm) return;
+      navForm.classList.add("is-applying-view");
+      if (typeof navForm.requestSubmit === "function") navForm.requestSubmit();
+      else navForm.submit();
+    });
+    syncBudgetViewSelected();
+  }
   function fmtMoney(x){
     var n = Number(x);
     if (!isFinite(n)) n = 0;

@@ -1,6 +1,7 @@
 from calendar import month_name, monthrange
 from collections import defaultdict
 from datetime import date, timedelta
+import math
 from io import StringIO
 from tempfile import NamedTemporaryFile
 import csv as csv_module
@@ -89,6 +90,62 @@ if os.path.isdir(static_dir):
 
 def _budget_baseline_session_key(user_id: int, year_month: str, account_id: int) -> str:
     return f"finsavvy:503020_baseline:{user_id}:{year_month}:{account_id}"
+
+
+def _budget_customize_draft_session_key(user_id: int, year_month: str, account_id: int) -> str:
+    return f"finsavvy:503020_customize_draft:{user_id}:{year_month}:{account_id}"
+
+
+def _finite_json_float(value: object) -> float:
+    try:
+        v = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return 0.0
+    return v if math.isfinite(v) else 0.0
+
+
+def _valid_customize_draft_json(raw: str) -> bool:
+    if not raw or not raw.strip():
+        return False
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(data, list) or len(data) == 0:
+        return False
+    return all(isinstance(x, dict) for x in data)
+
+
+def _save_customize_draft(
+    request: Request, user_id: int, year_month: str, account_id: int, submitted: list[dict[str, object]]
+) -> None:
+    """Persist customize rows in the signed session cookie; skip silently if JSON or size is invalid."""
+    try:
+        rows: list[dict[str, object]] = []
+        for r in submitted:
+            od = r.get("other_detail")
+            if od is None:
+                od_out: str | None = None
+            else:
+                t = str(od).strip()[:120]
+                od_out = t or None
+            rows.append(
+                {
+                    "category": str(r.get("category") or "")[:200],
+                    "limit": _finite_json_float(r.get("limit")),
+                    "other_detail": od_out,
+                    "budget_bucket": str(r.get("budget_bucket") or "")[:24],
+                }
+            )
+        raw = json.dumps(rows, allow_nan=False, separators=(",", ":"))
+    except (TypeError, ValueError):
+        return
+    if len(raw.encode("utf-8")) > 3200:
+        return
+    try:
+        request.session[_budget_customize_draft_session_key(user_id, year_month, account_id)] = raw
+    except Exception:
+        return
 
 
 def _parse_limit_amount(raw: str) -> float | None:
@@ -1541,7 +1598,11 @@ def budgets_page(
     budget_mode = (request.query_params.get("budget_mode") or "").strip().lower()
     if view_only_month:
         budget_mode = ""
-    if budget_mode == "customize" and default_503020 and not finalized and not view_only_month:
+    customize_editing = bool(
+        budget_mode == "customize" and default_503020 and not finalized and not view_only_month
+    )
+    draft_key = _budget_customize_draft_session_key(user_id, period, account_id)
+    if customize_editing and not request.session.get(draft_key):
         request.session[_budget_baseline_session_key(user_id, period, account_id)] = json.dumps(
             {
                 "lines": [
@@ -1555,9 +1616,6 @@ def budgets_page(
                 ]
             }
         )
-    customize_editing = bool(
-        budget_mode == "customize" and default_503020 and not finalized and not view_only_month
-    )
     scratch_editing = bool(budget_mode == "scratch" and not finalized and not view_only_month)
     today_ym = f"{date.today().year}-{date.today().month:02d}"
     needs_budget_attention = (period == today_ym) and (not finalized) and (not view_only_month)
@@ -1578,22 +1636,49 @@ def budgets_page(
     )
 
     customize_seed_rows: list[dict[str, object]] = []
-    if default_503020 and default_503020.get("lines"):
+    if customize_editing:
+        raw_draft = request.session.get(draft_key)
+        if raw_draft:
+            try:
+                draft_lines = json.loads(raw_draft)
+                if isinstance(draft_lines, list):
+                    for r in draft_lines:
+                        if not isinstance(r, dict):
+                            continue
+                        customize_seed_rows.append(
+                            {
+                                "category": r.get("category") or "",
+                                "limit": r.get("limit"),
+                                "bucket": r.get("budget_bucket") or r.get("bucket") or "",
+                                "other_detail": r.get("other_detail"),
+                            }
+                        )
+            except (json.JSONDecodeError, TypeError):
+                customize_seed_rows = []
+    if not customize_seed_rows and default_503020 and default_503020.get("lines"):
         for r in default_503020["lines"]:
             customize_seed_rows.append(
                 {
                     "category": r["category"],
                     "limit": r["limit"],
                     "bucket": r.get("bucket", ""),
+                    "other_detail": r.get("other_detail"),
                 }
             )
     customize_edit_caps: dict[str, int] | None = None
-    if customize_editing and customize_seed_rows:
-        n_lines = len(customize_seed_rows)
-        customize_edit_caps = {
-            "baseline_line_count": n_lines,
-            "max_remove_or_add": budget_validate.max_add_or_remove_lines(n_lines),
-        }
+    if customize_editing:
+        n_base = 0
+        raw_bl = request.session.get(_budget_baseline_session_key(user_id, period, account_id))
+        if raw_bl:
+            try:
+                n_base = len(json.loads(raw_bl)["lines"])
+            except (json.JSONDecodeError, KeyError, TypeError):
+                n_base = 0
+        if n_base > 0:
+            customize_edit_caps = {
+                "baseline_line_count": n_base,
+                "max_remove_or_add": budget_validate.max_add_or_remove_lines(n_base),
+            }
     min_carry_for_budget_ui = round(budget_503020.min_monthly_carryover_default(), 2)
     carryover_prev_streak = 0
     prev_ym_ctx = budget_validate.previous_year_month(period)
@@ -1892,6 +1977,7 @@ def budgets_commit_system(
         carryover_shortfall_streak=int(streak_val or 0),
     )
     request.session.pop(_budget_baseline_session_key(user_id, ym, account_id), None)
+    request.session.pop(_budget_customize_draft_session_key(user_id, ym, account_id), None)
     return RedirectResponse(url=f"/budgets?account_id={account_id}&period={ym}{_budgets_bv_query(request)}", status_code=303)
 
 
@@ -1972,6 +2058,7 @@ async def budgets_commit_customized(
         db, user_id=user_id, account_id=account_id, year_month=ym, committed_total=committed_sum
     )
     if streak_err:
+        _save_customize_draft(request, user_id, ym, account_id, submitted)
         request.session["budget_error"] = streak_err
         return RedirectResponse(url=f"/budgets?account_id={account_id}&period={ym}&budget_mode=customize{_budgets_bv_query(request)}", status_code=303)
     err = budget_validate.validate_customized_503020_flexible(
@@ -1980,6 +2067,7 @@ async def budgets_commit_customized(
         prior_month_income=prior_income if prior_income >= 100.0 else None,
     )
     if err:
+        _save_customize_draft(request, user_id, ym, account_id, submitted)
         request.session["budget_error"] = err
         return RedirectResponse(url=f"/budgets?account_id={account_id}&period={ym}&budget_mode=customize{_budgets_bv_query(request)}", status_code=303)
     base_total = sum(float(r["limit"]) for r in baseline_lines)
@@ -2009,6 +2097,7 @@ async def budgets_commit_customized(
         carryover_shortfall_streak=int(streak_val or 0),
     )
     request.session.pop(key, None)
+    request.session.pop(_budget_customize_draft_session_key(user_id, ym, account_id), None)
     return RedirectResponse(url=f"/budgets?account_id={account_id}&period={ym}{_budgets_bv_query(request)}", status_code=303)
 
 
@@ -2123,6 +2212,7 @@ async def budgets_commit_scratch(
         carryover_shortfall_streak=int(streak_val or 0),
     )
     request.session.pop(_budget_baseline_session_key(user_id, ym, account_id), None)
+    request.session.pop(_budget_customize_draft_session_key(user_id, ym, account_id), None)
     return RedirectResponse(url=f"/budgets?account_id={account_id}&period={ym}{_budgets_bv_query(request)}", status_code=303)
 
 

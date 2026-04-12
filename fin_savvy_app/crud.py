@@ -653,6 +653,7 @@ def upsert_budget_commitment(
     mode: str,
     system_recommended_total: float | None,
     committed_total: float | None,
+    carryover_shortfall_streak: int = 0,
 ) -> models.BudgetMonthCommitment:
     row = (
         db.query(models.BudgetMonthCommitment)
@@ -669,7 +670,7 @@ def upsert_budget_commitment(
         row.system_recommended_total = system_recommended_total
         row.committed_total = committed_total
         row.committed_at = now
-        row.carryover_shortfall_streak = int(carryover_shortfall_streak)
+        row.carryover_shortfall_streak = int(carryover_shortfall_streak or 0)
     else:
         row = models.BudgetMonthCommitment(
             user_id=user_id,
@@ -679,7 +680,7 @@ def upsert_budget_commitment(
             system_recommended_total=system_recommended_total,
             committed_total=committed_total,
             committed_at=now,
-            carryover_shortfall_streak=int(carryover_shortfall_streak),
+            carryover_shortfall_streak=int(carryover_shortfall_streak or 0),
         )
         db.add(row)
     db.commit()

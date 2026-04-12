@@ -66,6 +66,18 @@ def main() -> None:
     red = budget_503020.split_balance_traffic_light(450, 450, 100)
     _assert(red["state"] == "red", red)
 
+    base_g = [{"category": "Groceries", "limit": 100.0}]
+    sub_dup = [{"category": "Groceries", "limit": 40.0}, {"category": "Groceries", "limit": 60.0}]
+    err_dup = budget_validate.validate_customized_503020_flexible(base_g, sub_dup)
+    _assert(err_dup is not None and "Groceries" in err_dup and "2" in err_dup, err_dup)
+
+    sub_other_dup = [
+        {"category": "Other", "limit": 10.0, "other_detail": "Pet"},
+        {"category": "Other", "limit": 20.0, "other_detail": "Pet"},
+    ]
+    msg_o = budget_validate.duplicate_budget_lines_user_message(sub_other_dup)
+    _assert("Other" in msg_o and "Pet" in msg_o, msg_o)
+
     print("budget_validate / split_balance_traffic_light: OK")
 
 
