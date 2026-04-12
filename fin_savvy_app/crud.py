@@ -1,4 +1,5 @@
 import os
+from calendar import monthrange
 from datetime import date, datetime, timedelta
 from secrets import token_urlsafe
 from typing import Any, Iterable
@@ -45,6 +46,38 @@ def dashboard_transaction_dedup_subquery(
         )
         .subquery()
     )
+
+
+def sum_income_for_account_calendar_month(
+    db: Session, account_id: int, year: int, month: int
+) -> float:
+    """
+    Total INCOME for one calendar month on the account, using the same dedupe rules as the dashboard.
+    """
+    start = date(year, month, 1)
+    end = date(year, month, monthrange(year, month)[1])
+    dedup_sq = dashboard_transaction_dedup_subquery(db, account_id, start, end)
+    if dedup_sq is not None:
+        v = (
+            db.query(func.coalesce(func.sum(models.Transaction.amount), 0.0))
+            .select_from(models.Transaction)
+            .join(dedup_sq, models.Transaction.id == dedup_sq.c.kid)
+            .filter(models.Transaction.direction == "INCOME")
+            .scalar()
+        )
+        return float(v or 0.0)
+    v = (
+        db.query(func.coalesce(func.sum(models.Transaction.amount), 0.0))
+        .join(models.Statement)
+        .filter(
+            models.Statement.bank_account_id == account_id,
+            models.Transaction.date >= start,
+            models.Transaction.date <= end,
+            models.Transaction.direction == "INCOME",
+        )
+        .scalar()
+    )
+    return float(v or 0.0)
 
 
 def get_user_by_username(db: Session, username: str) -> models.User | None:
@@ -636,6 +669,7 @@ def upsert_budget_commitment(
         row.system_recommended_total = system_recommended_total
         row.committed_total = committed_total
         row.committed_at = now
+        row.carryover_shortfall_streak = int(carryover_shortfall_streak)
     else:
         row = models.BudgetMonthCommitment(
             user_id=user_id,
@@ -645,6 +679,7 @@ def upsert_budget_commitment(
             system_recommended_total=system_recommended_total,
             committed_total=committed_total,
             committed_at=now,
+            carryover_shortfall_streak=int(carryover_shortfall_streak),
         )
         db.add(row)
     db.commit()

@@ -6,13 +6,14 @@ with category splits informed by the user's recent spending pattern (same accoun
 from __future__ import annotations
 
 import math
+import os
 from collections import defaultdict
 from datetime import date
 from typing import Any
 
 from sqlalchemy.orm import Session
 
-from . import budget_recommendations, classifier, models
+from . import budget_recommendations, classifier, crud, models
 
 # 50% needs — essential living + work
 _NEEDS = frozenset(
@@ -216,6 +217,14 @@ def _aggregate_expense_by_category_span(
     return dict(agg)
 
 
+def min_monthly_carryover_default() -> float:
+    raw = os.environ.get("FINSAVVY_MIN_MONTHLY_CARRYOVER", "2000").strip() or "2000"
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        return 2000.0
+
+
 def build_default_month_budget(
     db: Session,
     account_id: int,
@@ -225,9 +234,11 @@ def build_default_month_budget(
 ) -> dict[str, Any] | None:
     """
     Returns dict with:
-      income_estimate, needs_pool, wants_pool, savings_pool,
+      income_estimate (for UI / score: prior calendar month income when available),
+      needs_pool, wants_pool, savings_pool,
       lines: [{category, limit, bucket}],
       reference_total (sum of limits),
+      prior_month_for_income, prior_month_income, min_monthly_carryover, allocatable_for_502020,
       rule_note (str)
     """
     parts = year_month.strip().split("-")
@@ -245,9 +256,23 @@ def build_default_month_budget(
     if income_est < 500:
         income_est = max(exp_avg, 5000.0)
 
-    needs_pool = income_est * 0.50
-    wants_pool = income_est * 0.30
-    savings_pool = income_est * 0.20
+    prior_y, prior_m = (y - 1, 12) if m == 1 else (y, m - 1)
+    prior_income = float(crud.sum_income_for_account_calendar_month(db, account_id, prior_y, prior_m))
+    min_carry = _min_monthly_carryover_amount()
+    use_prior_income = prior_income >= 100.0
+    if use_prior_income:
+        envelope_income = max(0.0, prior_income - min_carry)
+        if envelope_income <= 0:
+            envelope_income = prior_income
+        income_for_pools = envelope_income
+        income_display = prior_income
+    else:
+        income_for_pools = float(income_est)
+        income_display = float(income_est)
+
+    needs_pool = income_for_pools * 0.50
+    wants_pool = income_for_pools * 0.30
+    savings_pool = income_for_pools * 0.20
 
     span_totals = _aggregate_expense_by_category_span(db, account_id, priors)
     bucket_spend = {"needs": 0.0, "wants": 0.0, "savings": 0.0}
@@ -288,15 +313,42 @@ def build_default_month_budget(
     out_lines = sorted(merged.values(), key=lambda r: (-r["limit"], r["category"]))
     ref_total = sum(r["limit"] for r in out_lines)
 
+    allocatable = float(income_for_pools)
+    if use_prior_income and allocatable > 0 and ref_total > 0 and abs(ref_total - allocatable) > 25.0:
+        adj = allocatable / ref_total
+        for r in out_lines:
+            r["limit"] = max(50.0, math.ceil(float(r["limit"]) * adj / 50.0) * 50.0)
+        ref_total = sum(float(r["limit"]) for r in out_lines)
+        drift = allocatable - ref_total
+        if abs(drift) >= 1.0 and out_lines:
+            i0 = max(range(len(out_lines)), key=lambda i: float(out_lines[i]["limit"]))
+            out_lines[i0]["limit"] = max(50.0, float(out_lines[i0]["limit"]) + drift)
+            ref_total = sum(float(r["limit"]) for r in out_lines)
+
+    if use_prior_income:
+        pm_label = f"{prior_y:04d}-{prior_m:02d}"
+        rule_note = (
+            f"Based on last month’s income on this account (R {prior_income:.2f} in {pm_label}, same basis as the dashboard), "
+            f"we reserve R {min_carry:.2f} as minimum carry-over; the 50/30/20 split applies to about R {allocatable:.2f} after that reserve. "
+            "Category lines use your usual spending mix from prior months."
+        )
+    else:
+        rule_note = (
+            "50% Needs (essentials), 30% Wants (discretionary), 20% Savings & investments — "
+            "pools are split across your usual categories from the last several months "
+            "(last month’s income was not enough to anchor the envelope, so we used your recent average)."
+        )
+
     return {
-        "income_estimate": round(income_est, 2),
+        "income_estimate": round(income_display, 2),
         "needs_pool": round(needs_pool, 2),
         "wants_pool": round(wants_pool, 2),
         "savings_pool": round(savings_pool, 2),
         "lines": out_lines,
         "reference_total": round(ref_total, 2),
-        "rule_note": (
-            "50% Needs (essentials), 30% Wants (discretionary), 20% Savings & investments — "
-            "pools are split across your usual categories from the last several months."
-        ),
+        "prior_month_for_income": f"{prior_y:04d}-{prior_m:02d}",
+        "prior_month_income": round(prior_income, 2) if use_prior_income else None,
+        "min_monthly_carryover": round(min_carry, 2),
+        "allocatable_for_502020": round(allocatable, 2),
+        "rule_note": rule_note,
     }

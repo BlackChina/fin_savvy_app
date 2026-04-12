@@ -26,8 +26,9 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg2://fin_savvy_user:fin_savvy_password@db:5432/fin_savvy
       FINSAVVY_CLASSIFIER: local
-      # Multiclass LR probabilities are often <0.35; 0 = always use top predicted category (see ml_classifier.py)
-      FINSAVVY_ML_MIN_PROBABILITY: "0"
+      # Below this top-class probability, ML category/party is skipped (raw description as party fallback).
+      # "0" forces every prediction through and often collapses spend to one party (e.g. Bossa); 0.28–0.45 is typical.
+      FINSAVVY_ML_MIN_PROBABILITY: "0.32"
       # Dashboard: collapse duplicate rows from overlapping statement uploads (same date, amount, description)
       FINSAVVY_DASHBOARD_DEDUPE: "1"
     ports:

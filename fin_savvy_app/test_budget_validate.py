@@ -47,6 +47,16 @@ def main() -> None:
     err3 = budget_validate.validate_customized_503020_flexible(base, sub3)
     _assert(err3 is not None and "add" in err3.lower(), err3)
 
+    # Prior-month income caps the high bound: 125% of 1000 = 1250 but income 1000 → max 1000
+    sub_cap = [{"category": c, "limit": 110.0} for c in ("A", "B", "C", "D", "E", "F", "G", "H", "I", "J")]
+    err_cap = budget_validate.validate_customized_503020_flexible(
+        base, sub_cap, prior_month_income=1000.0
+    )
+    _assert(err_cap is not None and ("income" in err_cap.lower() or "exceed" in err_cap.lower()), err_cap)
+
+    _assert(budget_validate.previous_year_month("2025-03") == "2025-02", "prev ym")
+    _assert(budget_validate.previous_year_month("2025-01") == "2024-12", "prev ym jan")
+
     g = budget_503020.split_balance_traffic_light(500, 300, 200)
     _assert(g["state"] == "green", g)
 

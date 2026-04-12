@@ -5,6 +5,20 @@ from __future__ import annotations
 from typing import Any
 
 
+def previous_year_month(year_month: str) -> str | None:
+    """Calendar month immediately before year_month (YYYY-MM)."""
+    parts = year_month.strip().split("-")
+    if len(parts) != 2:
+        return None
+    try:
+        y, m = int(parts[0]), int(parts[1])
+    except ValueError:
+        return None
+    if m <= 1:
+        return f"{y - 1}-12"
+    return f"{y}-{m - 1:02d}"
+
+
 def _row_key(category: str, other_detail: str | None) -> str:
     c = (category or "").strip()
     if c.lower() == "other":
@@ -28,6 +42,7 @@ def validate_customized_503020_flexible(
     max_line_change_ratio: float = 0.40,
     total_min_ratio: float = 0.75,
     total_max_ratio: float = 1.25,
+    prior_month_income: float | None = None,
 ) -> str | None:
     """
     baseline: [{"category", "limit", "other_detail" (optional)}, ...] from the system suggestion.
@@ -68,12 +83,33 @@ def validate_customized_503020_flexible(
         return "Add at least one category with a positive limit."
 
     sub_total = sum(sub_map.values())
-    lo, hi = base_total * total_min_ratio, base_total * total_max_ratio
-    if sub_total < lo - 0.01 or sub_total > hi + 0.01:
-        return (
-            f"Total budget must stay within {(total_min_ratio * 100):.0f}%–{(total_max_ratio * 100):.0f}% "
-            f"of the suggested total (R {base_total:,.2f}). Your total is R {sub_total:,.2f}."
-        ).replace(",", " ")
+    lo = base_total * total_min_ratio
+    pi = float(prior_month_income) if prior_month_income is not None and float(prior_month_income) > 0 else None
+    if pi is not None:
+        hi = min(base_total * total_max_ratio, pi)
+        if sub_total > pi + 0.01:
+            return (
+                f"Allocated total cannot exceed last month’s income on this account (R {pi:,.2f}). "
+                f"Your total is R {sub_total:,.2f}."
+            ).replace(",", " ")
+        if sub_total > hi + 0.01:
+            return (
+                f"Total budget must be at least {(total_min_ratio * 100):.0f}% of the suggested total (R {lo:,.2f}) "
+                f"and at most the lower of {(total_max_ratio * 100):.0f}% of suggested (R {base_total * total_max_ratio:,.2f}) "
+                f"and last month’s income (R {pi:,.2f}). Your total is R {sub_total:,.2f}."
+            ).replace(",", " ")
+        if sub_total < lo - 0.01:
+            return (
+                f"Total budget must be at least {(total_min_ratio * 100):.0f}% of the suggested total (R {lo:,.2f}). "
+                f"Your total is R {sub_total:,.2f}."
+            ).replace(",", " ")
+    else:
+        hi = base_total * total_max_ratio
+        if sub_total < lo - 0.01 or sub_total > hi + 0.01:
+            return (
+                f"Total budget must stay within {(total_min_ratio * 100):.0f}%–{(total_max_ratio * 100):.0f}% "
+                f"of the suggested total (R {base_total:,.2f}). Your total is R {sub_total:,.2f}."
+            ).replace(",", " ")
 
     base_keys = set(base_map.keys())
     sub_keys = set(sub_map.keys())
@@ -92,4 +128,20 @@ def validate_customized_503020_flexible(
             f"You may add at most {cap} new lines on top of the {n} suggested ({pct}% of the list). "
             f"This submission adds {added} new line(s)."
         )
+    return None
+
+
+def validate_scratch_total_vs_prior_income(
+    committed_total: float,
+    *,
+    prior_month_income: float | None,
+) -> str | None:
+    pi = float(prior_month_income) if prior_month_income is not None and float(prior_month_income) > 0 else None
+    if pi is None:
+        return None
+    if float(committed_total) > pi + 0.01:
+        return (
+            f"Your budget total cannot exceed last month’s income on this account (R {pi:,.2f}). "
+            f"Your total is R {float(committed_total):,.2f}."
+        ).replace(",", " ")
     return None

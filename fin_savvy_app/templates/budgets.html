@@ -149,7 +149,7 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
 {% elif not view_only_month and not budget_finalized and default_503020 %}
 <div class="card" id="unified-budget">
 <h2>FinSavvy suggested budget (50 / 30 / 20)</h2>
-<p class="hint" style="margin-top:0">{{ default_503020.rule_note }} Estimated income baseline for this envelope: <strong>R {{ default_503020.income_estimate | format_currency }}</strong> · Suggested total limits: <strong>R {{ default_503020.reference_total | format_currency }}</strong>.</p>
+<p class="hint" style="margin-top:0">{{ default_503020.rule_note }}{% if default_503020.prior_month_income %} Last month’s income (dashboard basis): <strong>R {{ default_503020.prior_month_income | format_currency }}</strong> · Minimum carry-over reserved: <strong>R {{ default_503020.min_monthly_carryover | format_currency }}</strong> · 50/30/20 on about <strong>R {{ default_503020.allocatable_for_502020 | format_currency }}</strong> · Suggested line total: <strong>R {{ default_503020.reference_total | format_currency }}</strong>.{% else %} Estimated income baseline: <strong>R {{ default_503020.income_estimate | format_currency }}</strong> · Suggested total limits: <strong>R {{ default_503020.reference_total | format_currency }}</strong>.{% endif %}</p>
 <p class="hint" style="font-size:.82rem">Pools: Needs <span class="bucket-needs">R {{ default_503020.needs_pool | format_currency }}</span> · Wants <span class="bucket-wants">R {{ default_503020.wants_pool | format_currency }}</span> · Savings &amp; investments <span class="bucket-savings">R {{ default_503020.savings_pool | format_currency }}</span></p>
 {% if customize_editing %}
 <form method="post" action="/budgets/commit-customized" id="form-customize-budget" data-income-est="{{ default_503020.income_estimate }}">
@@ -174,7 +174,10 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
 </tr>{% endfor %}
 </tbody></table>
 {% if customize_edit_caps %}
-<p class="hint" style="font-size:.8rem">You may <strong>remove</strong> at most {{ customize_edit_caps.max_remove_or_add }} of the {{ customize_edit_caps.baseline_line_count }} suggested lines and <strong>add</strong> at most {{ customize_edit_caps.max_remove_or_add }} new lines (40% each way). You can change limits on lines you keep freely. The <strong>sum of all limits</strong> must stay between <strong>75%</strong> and <strong>125%</strong> of the suggested total (R {{ default_503020.reference_total | format_currency }}).</p>
+<p class="hint" style="font-size:.8rem">You may <strong>remove</strong> at most {{ customize_edit_caps.max_remove_or_add }} of the {{ customize_edit_caps.baseline_line_count }} suggested lines and <strong>add</strong> at most {{ customize_edit_caps.max_remove_or_add }} new lines (40% each way). You can change limits on lines you keep freely. The <strong>sum of all limits</strong> must be at least <strong>75%</strong> of the suggested total (R {{ default_503020.reference_total | format_currency }}) and at most the <strong>lower of 125% of that total and last month’s income</strong>{% if default_503020.prior_month_income %} (R {{ default_503020.prior_month_income | format_currency }} in {{ default_503020.prior_month_for_income }}){% endif %}.</p>
+{% endif %}
+{% if default_503020.prior_month_income and carryover_prev_streak > 0 and carryover_prev_streak < 3 %}
+<p class="hint" style="font-size:.78rem;color:#fde68a">Carry-over target: we aim for at least <strong>R {{ min_carry_for_budget_ui | format_currency }}</strong> left after limits vs last month’s income. You’ve had <strong>{{ carryover_prev_streak }}</strong> consecutive month(s) below that — after <strong>three</strong>, the next month you’ll need to meet the target to save your budget.</p>
 {% endif %}
 <div class="budget-tally-card" id="customize-budget-tally" aria-live="polite">
 <h3>Budget tally &amp; split</h3>

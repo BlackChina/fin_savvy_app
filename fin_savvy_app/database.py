@@ -120,11 +120,21 @@ def _ensure_schema_patches() -> None:
                             system_recommended_total DOUBLE PRECISION,
                             committed_total DOUBLE PRECISION,
                             committed_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                            carryover_shortfall_streak INTEGER NOT NULL DEFAULT 0,
                             CONSTRAINT uq_budget_month_commitment UNIQUE (user_id, year_month, scope_key)
                         )
                         """
                     )
                 )
+        if "budget_month_commitment" in tables:
+            bmc_cols = {c["name"] for c in insp.get_columns("budget_month_commitment")}
+            if "carryover_shortfall_streak" not in bmc_cols:
+                with engine.begin() as conn:
+                    conn.execute(
+                        text(
+                            "ALTER TABLE budget_month_commitment ADD COLUMN carryover_shortfall_streak INTEGER NOT NULL DEFAULT 0"
+                        )
+                    )
     except Exception:
         pass
 

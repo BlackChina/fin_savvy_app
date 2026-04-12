@@ -332,6 +332,17 @@ def compute_month_score_payload(
             and has_budgets
         ):
             total = min(100.0, total + 2.0)
+        if inc_payload and ct is not None and commitment.mode in ("system", "scratch", "legacy", "customized"):
+            prior_pi = inc_payload.get("prior_month_income")
+            ref_inc = (
+                float(prior_pi)
+                if prior_pi is not None and float(prior_pi) > 0
+                else (float(income_est) if income_est else 0.0)
+            )
+            if ref_inc > 0:
+                min_c = budget_503020.min_monthly_carryover_default()
+                if ref_inc - float(ct) < float(min_c) - 0.25:
+                    total = max(0.0, total - 2.0)
 
     total = round(max(0.0, min(100.0, total)), 1)
 

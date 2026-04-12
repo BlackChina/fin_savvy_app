@@ -101,6 +101,47 @@ def _parse_limit_amount(raw: str) -> float | None:
         return None
 
 
+def _prior_month_income_for_budget(db: Session, account_id: int, year_month: str) -> float:
+    prev = budget_validate.previous_year_month(year_month.strip())
+    if not prev:
+        return 0.0
+    py, pm_s = prev.split("-")
+    return float(crud.sum_income_for_account_calendar_month(db, account_id, int(py), int(pm_s)))
+
+
+def _carryover_streak_gate_and_value(
+    db: Session,
+    *,
+    user_id: int,
+    account_id: int,
+    year_month: str,
+    committed_total: float,
+) -> tuple[int | None, str | None]:
+    """
+    Returns (new_streak, error_message). new_streak is None when the user is blocked from committing.
+    """
+    sk = f"acc:{account_id}"
+    prior_income = _prior_month_income_for_budget(db, account_id, year_month)
+    min_c = budget_503020.min_monthly_carryover_default()
+    prev_ym = budget_validate.previous_year_month(year_month.strip())
+    prev_streak = 0
+    if prev_ym:
+        pc = crud.get_budget_commitment(db, user_id, prev_ym, sk)
+        if pc is not None:
+            prev_streak = int(getattr(pc, "carryover_shortfall_streak", 0) or 0)
+    shortfall = prior_income >= 100.0 and (prior_income - float(committed_total)) < float(min_c) - 0.5
+    if prev_streak >= 3 and shortfall:
+        msg = (
+            "You have already had three months in a row without meeting the minimum carry-over target "
+            f"(leave at least R {min_c:.0f} unallocated vs last month’s income after your limits). "
+            "This month you must meet that target to save this budget. "
+            "Reduce some limits or use fewer lines until the tally shows enough headroom."
+        )
+        return None, msg
+    new_streak = (prev_streak + 1) if shortfall else 0
+    return new_streak, None
+
+
 def _year_month_tuple(ym: str) -> tuple[int, int] | None:
     parts = (ym or "").strip().split("-")
     if len(parts) != 2:
@@ -1532,6 +1573,13 @@ def budgets_page(
             "baseline_line_count": n_lines,
             "max_remove_or_add": budget_validate.max_add_or_remove_lines(n_lines),
         }
+    min_carry_for_budget_ui = round(budget_503020.min_monthly_carryover_default(), 2)
+    carryover_prev_streak = 0
+    prev_ym_ctx = budget_validate.previous_year_month(period)
+    if prev_ym_ctx:
+        pco = crud.get_budget_commitment(db, user_id, prev_ym_ctx, f"acc:{account_id}")
+        if pco is not None:
+            carryover_prev_streak = int(getattr(pco, "carryover_shortfall_streak", 0) or 0)
     cmt = crud.get_budget_commitment(db, user_id, period, f"acc:{account_id}")
     budget_commitment_info = {"mode": cmt.mode} if cmt else None
 
@@ -1582,6 +1630,8 @@ def budgets_page(
             "current_period_ym": today_ym,
             "customize_seed_rows": customize_seed_rows,
             "customize_edit_caps": customize_edit_caps,
+            "min_carry_for_budget_ui": min_carry_for_budget_ui,
+            "carryover_prev_streak": carryover_prev_streak,
             "budget_commitment_info": budget_commitment_info,
         },
     )
@@ -1770,8 +1820,14 @@ def budgets_commit_system(
         request.session["budget_error"] = "Not enough statement history to build the recommended budget. Upload more months or use custom budget from scratch."
         return RedirectResponse(url=f"/budgets?account_id={account_id}&period={ym}", status_code=303)
     sk = f"acc:{account_id}"
-    crud.delete_all_budgets_for_month_scope(db, user_id=user_id, year_month=ym, bank_account_id=account_id)
     ref = float(payload["reference_total"])
+    streak_val, streak_err = _carryover_streak_gate_and_value(
+        db, user_id=user_id, account_id=account_id, year_month=ym, committed_total=ref
+    )
+    if streak_err:
+        request.session["budget_error"] = streak_err
+        return RedirectResponse(url=f"/budgets?account_id={account_id}&period={ym}", status_code=303)
+    crud.delete_all_budgets_for_month_scope(db, user_id=user_id, year_month=ym, bank_account_id=account_id)
     for row in payload["lines"]:
         crud.upsert_monthly_budget(
             db,
@@ -1792,6 +1848,7 @@ def budgets_commit_system(
         mode="system",
         system_recommended_total=ref,
         committed_total=ref,
+        carryover_shortfall_streak=int(streak_val or 0),
     )
     request.session.pop(_budget_baseline_session_key(user_id, ym, account_id), None)
     return RedirectResponse(url=f"/budgets?account_id={account_id}&period={ym}", status_code=303)
@@ -1868,13 +1925,24 @@ async def budgets_commit_customized(
                 status_code=303,
             )
         submitted.append({"category": c, "limit": float(lim), "other_detail": od, "budget_bucket": bb})
-    err = budget_validate.validate_customized_503020_flexible(baseline_lines, submitted)
+    committed_sum = sum(float(r["limit"]) for r in submitted)
+    prior_income = _prior_month_income_for_budget(db, account_id, ym)
+    streak_val, streak_err = _carryover_streak_gate_and_value(
+        db, user_id=user_id, account_id=account_id, year_month=ym, committed_total=committed_sum
+    )
+    if streak_err:
+        request.session["budget_error"] = streak_err
+        return RedirectResponse(url=f"/budgets?account_id={account_id}&period={ym}&budget_mode=customize", status_code=303)
+    err = budget_validate.validate_customized_503020_flexible(
+        baseline_lines,
+        submitted,
+        prior_month_income=prior_income if prior_income >= 100.0 else None,
+    )
     if err:
         request.session["budget_error"] = err
         return RedirectResponse(url=f"/budgets?account_id={account_id}&period={ym}&budget_mode=customize", status_code=303)
     base_total = sum(float(r["limit"]) for r in baseline_lines)
     crud.delete_all_budgets_for_month_scope(db, user_id=user_id, year_month=ym, bank_account_id=account_id)
-    new_total = 0.0
     for row in submitted:
         cat = str(row["category"])
         od_row = row.get("other_detail") if cat.strip().lower() == "other" else None
@@ -1888,7 +1956,6 @@ async def budgets_commit_customized(
             other_detail=od_row,
             budget_bucket=str(row.get("budget_bucket") or ""),
         )
-        new_total += float(row["limit"])
     crud.upsert_budget_provenance(db, user_id, ym, sk, "customized_503020")
     crud.upsert_budget_commitment(
         db,
@@ -1897,7 +1964,8 @@ async def budgets_commit_customized(
         scope_key=sk,
         mode="customized",
         system_recommended_total=float(base_total),
-        committed_total=float(new_total),
+        committed_total=float(committed_sum),
+        carryover_shortfall_streak=int(streak_val or 0),
     )
     request.session.pop(key, None)
     return RedirectResponse(url=f"/budgets?account_id={account_id}&period={ym}", status_code=303)
@@ -1968,10 +2036,29 @@ async def budgets_commit_scratch(
             url=f"/budgets?account_id={account_id}&period={ym}&budget_mode=scratch",
             status_code=303,
         )
+    total = sum(lim for _, lim, _, _ in rows_out)
+    prior_income = _prior_month_income_for_budget(db, account_id, ym)
+    err_pi = budget_validate.validate_scratch_total_vs_prior_income(
+        total, prior_month_income=prior_income if prior_income >= 100.0 else None
+    )
+    if err_pi:
+        request.session["budget_error"] = err_pi
+        return RedirectResponse(
+            url=f"/budgets?account_id={account_id}&period={ym}&budget_mode=scratch",
+            status_code=303,
+        )
+    streak_val, streak_err = _carryover_streak_gate_and_value(
+        db, user_id=user_id, account_id=account_id, year_month=ym, committed_total=total
+    )
+    if streak_err:
+        request.session["budget_error"] = streak_err
+        return RedirectResponse(
+            url=f"/budgets?account_id={account_id}&period={ym}&budget_mode=scratch",
+            status_code=303,
+        )
     sys_payload = budget_503020.build_default_month_budget(db, account_id, ym)
     sys_ref = float(sys_payload["reference_total"]) if sys_payload else None
     crud.delete_all_budgets_for_month_scope(db, user_id=user_id, year_month=ym, bank_account_id=account_id)
-    total = 0.0
     for cat, lim, od, bb in rows_out:
         crud.upsert_monthly_budget(
             db,
@@ -1983,7 +2070,6 @@ async def budgets_commit_scratch(
             other_detail=od,
             budget_bucket=bb,
         )
-        total += lim
     crud.upsert_budget_provenance(db, user_id, ym, sk, "scratch")
     crud.upsert_budget_commitment(
         db,
@@ -1993,6 +2079,7 @@ async def budgets_commit_scratch(
         mode="scratch",
         system_recommended_total=sys_ref,
         committed_total=float(total),
+        carryover_shortfall_streak=int(streak_val or 0),
     )
     request.session.pop(_budget_baseline_session_key(user_id, ym, account_id), None)
     return RedirectResponse(url=f"/budgets?account_id={account_id}&period={ym}", status_code=303)

@@ -118,6 +118,8 @@ class BudgetMonthCommitment(Base):
     system_recommended_total = Column(Float, nullable=True)
     committed_total = Column(Float, nullable=True)
     committed_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    # Consecutive months (including this row's month) where committed limits left less than min carry vs prior income.
+    carryover_shortfall_streak = Column(Integer, nullable=False, default=0)
 
 
 class BudgetMonthProvenance(Base):
