@@ -130,13 +130,13 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
 <form method="get" action="/budgets" class="budget-nav-form">
 {% if budget_mode_query %}<input type="hidden" name="budget_mode" value="{{ budget_mode_query }}"/>{% endif %}
 <fieldset class="budget-nav-structure">
-<legend class="sr-only">How to organise limits</legend>
-<label><input type="radio" name="budget_view" value="per_account" {% if budget_view != 'combined' %}checked{% endif %}/> One plan per bank account</label>
-<label><input type="radio" name="budget_view" value="combined" {% if budget_view == 'combined' %}checked{% endif %}/> Combined view — every account &amp; “All accounts” rows</label>
+<legend class="sr-only">Budget layout</legend>
+<label><input type="radio" name="budget_view" value="per_account" {% if budget_view != 'combined' %}checked{% endif %}/> One account at a time</label>
+<label><input type="radio" name="budget_view" value="combined" {% if budget_view == 'combined' %}checked{% endif %}/> All limits on one screen</label>
 </fieldset>
-<p class="hint" style="margin:0 0 .5rem;font-size:.8rem">Use <strong>per account</strong> when you budget Cheque, Savings, Capitec, etc. separately. Use <strong>combined</strong> to see every limit line for the month in one table (still pick a <em>primary</em> account for the income-based suggestion and your score).</p>
+<p class="hint" style="margin:0 0 .5rem;font-size:.8rem">Pick an account below, then load a month. <strong>One account at a time</strong> is the usual workflow (each bank account has its own limits). <strong>All limits on one screen</strong> lists every saved line for that month together—useful when you use several accounts in one month. The suggested envelope and FinSavvy score always follow the account you select here.</p>
 <div class="budget-nav-grid">
-<div><label for="budget-nav-account">{% if budget_view == 'combined' %}Primary account (envelope &amp; score){% else %}Account{% endif %}</label>
+<div><label for="budget-nav-account">{% if budget_view == 'combined' %}Account for income &amp; score{% else %}Account{% endif %}</label>
 <select name="account_id" id="budget-nav-account">{% for acc in accounts %}
 <option value="{{ acc.id }}" {% if acc.id == account_id %}selected{% endif %}>{{ acc.name }}</option>{% endfor %}
 </select></div>
@@ -182,7 +182,7 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
 {% elif not view_only_month and not budget_finalized and default_503020 %}
 <div class="card" id="unified-budget">
 {% if budget_view == 'combined' %}
-<p class="hint" style="margin-top:0;margin-bottom:.75rem;font-size:.82rem;color:#a5b4fc">Combined view: the table below lists <strong>all</strong> limit rows for {{ period }}. The suggested envelope and FinSavvy score still use the <strong>primary account</strong> you chose above.</p>
+<p class="hint" style="margin-top:0;margin-bottom:.75rem;font-size:.82rem;color:#a5b4fc">You’re viewing <strong>every</strong> limit line for <strong>{{ period }}</strong>. The suggested budget and FinSavvy score still use the <strong>account</strong> you picked in the bar above.</p>
 {% endif %}
 <h2>FinSavvy suggested budget (50 / 30 / 20)</h2>
 <p class="hint" style="margin-top:0">{{ default_503020.rule_note }}{% if default_503020.prior_month_income %} Last month’s income (dashboard basis): <strong>R {{ default_503020.prior_month_income | format_currency }}</strong> · Minimum carry-over reserved: <strong>R {{ default_503020.min_monthly_carryover | format_currency }}</strong> · 50/30/20 on about <strong>R {{ default_503020.allocatable_for_502020 | format_currency }}</strong> · Suggested line total: <strong>R {{ default_503020.reference_total | format_currency }}</strong>.{% else %} Estimated income baseline: <strong>R {{ default_503020.income_estimate | format_currency }}</strong> · Suggested total limits: <strong>R {{ default_503020.reference_total | format_currency }}</strong>.{% endif %}</p>
