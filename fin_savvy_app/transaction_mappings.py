@@ -18,12 +18,14 @@ from __future__ import annotations
 # Example:
 # ("Groceries", ("CHECKERS SIXTY60", "WOOLWORTHS FOODS")),
 MANUAL_CATEGORY_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
-    # Add your own category mappings here.
+    ("Groceries", ("CHECKERS SIXTY60", "WOOLWORTHS FOODS")),
+    ("Fuel", ("ENGEN SOMERSET WEST",)),
 ]
 
 # Party mappings: (PartyName, ("KEYWORD 1", "KEYWORD 2", ...))
 # Example:
 # ("Checkers", ("CHECKERS SIXTY60", "CHECKERS HYPER")),
 MANUAL_PARTY_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
-    # Add your own party mappings here.
+    ("Checkers", ("CHECKERS SIXTY60",)),
+    ("Engen", ("ENGEN SOMERSET WEST",)),
 ]

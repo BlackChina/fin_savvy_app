@@ -418,7 +418,7 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
 <span class="fs-score">{{ finsavvy_payload.finsavvy_score }}</span>
 <span class="fs-grade">Grade {{ finsavvy_payload.grade }}</span>
 </div>
-<p class="fs-score-note">The headline number blends three pillar <strong>scores</strong> (each scored 0–100 on its own). The <strong>percentages</strong> are <strong>weights</strong>: they show what share of the headline FinSavvy score comes from each pillar this month{% if finsavvy_payload.has_budgets %} (with a finalized budget, budget discipline is included){% else %} (without a finalized budget, the headline score ignores budget discipline and puts more weight on the other two pillars){% endif %}.</p>
+<p class="fs-score-note">The headline number blends {% if finsavvy_payload.weights.credit is defined and finsavvy_payload.weights.credit > 0 %}four{% else %}three{% endif %} pillar <strong>scores</strong> (each scored 0–100 on its own). The <strong>percentages</strong> are <strong>weights</strong>: they show what share of the headline FinSavvy score comes from each pillar this month{% if finsavvy_payload.has_budgets %} (with a finalized budget, budget discipline is included){% else %} (without a finalized budget, the headline score ignores budget discipline and puts more weight on the other pillars){% endif %}{% if finsavvy_payload.weights.credit is defined and finsavvy_payload.weights.credit > 0 %} A small <strong>credit</strong> weight appears when the server sets <strong>FINSAVVY_CREDIT_SCORE_NORMALIZED</strong> (0–100).{% endif %}</p>
 <div class="fs-subgrid">
 <div class="fs-sub">
 <span class="fs-pillar-title">Budget discipline score</span>

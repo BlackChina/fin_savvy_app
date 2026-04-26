@@ -6,6 +6,8 @@ Transparency-first: sub-scores and plain-language factors are returned for the U
 
 from __future__ import annotations
 
+import math
+import os
 from calendar import monthrange
 from dataclasses import dataclass
 from datetime import date
@@ -18,6 +20,23 @@ from . import budget_503020, classifier, crud, models
 
 
 LIFESTYLE_CATEGORIES = frozenset({"Dining", "Entertainment", "Alcohol & nightlife"})
+
+
+def _optional_credit_score_normalized() -> float | None:
+    """
+    When set, blends a credit-health pillar into the headline score (0–100), e.g. from a bureau API
+    you map into 0–100, or a manual monthly check. Env: FINSAVVY_CREDIT_SCORE_NORMALIZED=72
+    """
+    raw = (os.environ.get("FINSAVVY_CREDIT_SCORE_NORMALIZED") or "").strip()
+    if not raw:
+        return None
+    try:
+        v = float(raw)
+    except ValueError:
+        return None
+    if not math.isfinite(v):
+        return None
+    return max(0.0, min(100.0, v))
 
 
 def _parse_period(year_month: str) -> tuple[int, int] | None:
@@ -270,11 +289,22 @@ def compute_month_score_payload(
     receipts = crud.get_receipt_total_for_user(db, user_id, start, end)
     receipt, receipt_meta = _receipt_score(cash, receipts)
 
-    if has_budgets:
+    credit_c = _optional_credit_score_normalized()
+    if credit_c is not None:
+        if has_budgets:
+            w_b, w_l, w_r, w_cr = 0.40, 0.27, 0.23, 0.10
+            composite = w_b * float(adherence) + w_l * lifestyle + w_r * receipt + w_cr * credit_c
+        else:
+            w_b = 0.0
+            w_l, w_r, w_cr = 0.52, 0.33, 0.15
+            composite = w_l * lifestyle + w_r * receipt + w_cr * credit_c
+    elif has_budgets:
         w_b, w_l, w_r = 0.45, 0.30, 0.25
+        w_cr = 0.0
         composite = w_b * float(adherence) + w_l * lifestyle + w_r * receipt
     else:
         w_b, w_l, w_r = 0.0, 0.55, 0.45
+        w_cr = 0.0
         composite = w_l * lifestyle + w_r * receipt
 
     total = max(0.0, min(100.0, composite))
@@ -360,7 +390,7 @@ def compute_month_score_payload(
         transparency.append(
             {
                 "title": "Budget discipline",
-                "body": "You have not set any positive limits for this month yet, so this pillar is skipped and the other two are weighted more.",
+                "body": "You have not set any positive limits for this month yet, so this pillar is skipped and the other pillars are weighted more.",
             }
         )
     transparency.append(
@@ -379,6 +409,15 @@ def compute_month_score_payload(
             "If there were no cash withdrawals this month, this pillar stays in a neutral band until you have cash activity to measure.",
         }
     )
+    if credit_c is not None:
+        transparency.append(
+            {
+                "title": f"Credit health ({int(round(w_cr * 100))}% of your score)",
+                "body": "A normalized 0–100 credit signal is blended in when you set FINSAVVY_CREDIT_SCORE_NORMALIZED "
+                "(for example from a bureau score you map into this range). Wire your bureau client in credit_api.py "
+                "and populate this value server-side when ready.",
+            }
+        )
 
     improvements: list[str] = []
     if has_budgets and float(adherence) < 75:
@@ -419,11 +458,12 @@ def compute_month_score_payload(
         "lifestyle_share_pct": round((current_lifestyle_share or 0) * 100, 1) if current_lifestyle_share is not None else None,
         "budget_rows": adherence_rows,
         "has_budgets": has_budgets,
-        "weights": {"budget": w_b, "lifestyle": w_l, "receipt": w_r},
+        "weights": {"budget": w_b, "lifestyle": w_l, "receipt": w_r, "credit": w_cr},
         "components": {
             "budget_adherence": round(adherence, 1) if has_budgets else None,
             "lifestyle": round(lifestyle, 1),
             "receipt_coverage": round(receipt, 1),
+            "credit_score": round(credit_c, 1) if credit_c is not None else None,
         },
         "finsavvy_score": total,
         "grade": _grade(total),

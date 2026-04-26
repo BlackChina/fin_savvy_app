@@ -166,6 +166,10 @@ class Payslip(Base):
     file_path = Column(String(512), nullable=False)
     period_label = Column(String(100), nullable=True)
     uploaded_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    # Best-effort extraction from PDF text (see payslip_extract.py); null when unknown.
+    gross_pay = Column(Float, nullable=True)
+    net_pay = Column(Float, nullable=True)
+    paye_estimate = Column(Float, nullable=True)
 
     user = relationship("User", back_populates="payslips")
 

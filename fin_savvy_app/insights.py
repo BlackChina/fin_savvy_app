@@ -72,3 +72,41 @@ def build_budget_insights_payload(
         "daily_expenses": daily,
         "transaction_count": int(len(df)),
     }
+
+
+def pattern_summary_for_month(
+    expense_tuples: list[tuple[date, str, float]],
+    *,
+    top_n: int = 8,
+) -> dict[str, Any]:
+    """
+    Lightweight “pattern analyser”: party concentration, lifestyle share, top merchants.
+    """
+    df = expense_dataframe(expense_tuples)
+    if df.empty:
+        return {
+            "top_parties": [],
+            "lifestyle_share_pct": None,
+            "generosity_share_pct": None,
+            "herfindahl_parties": None,
+            "note": "No expense rows in this period.",
+        }
+    total = float(df["amount_abs"].sum())
+    lifestyle_labels = frozenset({"Dining", "Entertainment", "Alcohol & nightlife"})
+    lifestyle = float(df[df["category"].isin(lifestyle_labels)]["amount_abs"].sum())
+    gen_mask = df["description"].map(lambda d: classifier.is_generosity(str(d)))
+    generosity = float(df.loc[gen_mask, "amount_abs"].sum())
+    party_totals = df.groupby("party", as_index=False)["amount_abs"].sum().sort_values("amount_abs", ascending=False)
+    top = [
+        {"party": str(row["party"]), "total": float(row["amount_abs"])}
+        for _, row in party_totals.head(top_n).iterrows()
+    ]
+    shares = (party_totals["amount_abs"] / total) ** 2 if total > 0 else party_totals["amount_abs"] * 0
+    hhi = float(shares.sum()) if total > 0 else None
+    return {
+        "top_parties": top,
+        "lifestyle_share_pct": round((lifestyle / total) * 100.0, 1) if total > 0 else None,
+        "generosity_share_pct": round((generosity / total) * 100.0, 1) if total > 0 else None,
+        "herfindahl_parties": round(hhi, 4) if hhi is not None else None,
+        "note": "Higher party concentration (HHI) means a few merchants dominate spend this month.",
+    }

@@ -183,8 +183,34 @@ PARTY_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
     ("Savings Acct", ("SAVINGS",)),
 ]
 
-# Legacy summary cards (Generosity / Discretionary); empty = no matches.
-_GENEROSITY_KEYWORDS: set[str] = set()
+# Generosity / giving: tithes, offerings, faith-based and registered charity flows (dashboard summary).
+_GENEROSITY_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "TITHE",
+        "TITHES",
+        "TITHING",
+        "OFFERING",
+        "OFFERTORY",
+        "STEWARDSHIP",
+        "GIVENGAIN",
+        "GIVEN GAIN",
+        "CHARITY",
+        "DONATION",
+        "ZAKAT",
+        "ZAKAAT",
+        "SADAQAH",
+        "PARISH",
+        "CHURCH",
+        "SYNAGOGUE",
+        "MOSQUE",
+        "TEMPLE",
+        "PASTOR",
+        "ARCHDIOCESE",
+        "DIOCESE",
+        "NPO PAYMENT",
+        "SECTION 18A",
+    }
+)
 _DISCRETIONARY_KEYWORDS: set[str] = set()
 
 
@@ -222,7 +248,11 @@ def get_party_name(description: str, amount: float | None = None) -> str:
 
 def is_generosity(description: str) -> bool:
     d = (description or "").upper()
-    return any(kw in d for kw in _GENEROSITY_KEYWORDS)
+    if any(kw in d for kw in _GENEROSITY_KEYWORDS):
+        return True
+    if get_category_label(description, None) == "Charity":
+        return True
+    return False
 
 
 def is_discretionary(description: str) -> bool:

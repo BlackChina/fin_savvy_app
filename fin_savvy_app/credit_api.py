@@ -11,11 +11,23 @@ Do not commit real API secrets; use environment variables only.
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 
 def fetch_credit_stub(user_id: int) -> dict[str, Any]:
     """Placeholder until a real bureau client is implemented."""
+    demo = (os.environ.get("FINSAVVY_CREDIT_SCORE_NORMALIZED") or "").strip()
+    if demo:
+        try:
+            v = max(0.0, min(100.0, float(demo)))
+            return {
+                "score": v,
+                "history": [],
+                "message": "Demo credit signal from FINSAVVY_CREDIT_SCORE_NORMALIZED (0–100). Replace with bureau data in production.",
+            }
+        except ValueError:
+            pass
     return {
         "score": None,
         "history": [],

@@ -37,6 +37,7 @@ from . import (
     finsavvy_score,
     insights,
     models,
+    payslip_extract,
     pdf_parser,
     receipt_ocr,
     schemas,
@@ -1074,6 +1075,37 @@ def api_budget_insights(
     return JSONResponse(insights.build_budget_insights_payload(tuples))
 
 
+@app.get("/api/insights/patterns")
+def api_insights_patterns(
+    account_id: int,
+    period: str,
+    db: Session = Depends(get_db),
+    user_id: int | None = Depends(get_current_user_id),
+):
+    """Party concentration, lifestyle/generosity shares — lightweight pattern summary for the month."""
+    if user_id is None:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    if not crud.get_bank_account_for_user(db, account_id, user_id):
+        return JSONResponse({"error": "Account not found"}, status_code=404)
+    try:
+        y, m = period.strip().split("-")
+        year, month = int(y), int(m)
+    except (ValueError, AttributeError):
+        return JSONResponse({"error": "Use period=YYYY-MM"}, status_code=400)
+    tx_date_min, tx_date_max, _, _, _ = _dashboard_transaction_range(year, month, "month")
+    expenses = (
+        db.query(models.Transaction)
+        .join(models.Statement)
+        .filter(
+            *_dashboard_transaction_date_filters(account_id, tx_date_min, tx_date_max),
+            models.Transaction.direction == "EXPENSE",
+        )
+        .all()
+    )
+    tuples = [(t.date, t.description_raw, t.amount) for t in expenses]
+    return JSONResponse(insights.pattern_summary_for_month(tuples))
+
+
 @app.get("/api/alerts")
 def api_alerts(
     account_id: int,
@@ -1119,6 +1151,11 @@ def api_credit_score(
     """Placeholder for bureau API integration (set CREDIT_API_KEY when you have a provider)."""
     if user_id is None:
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    from . import credit_api
+
+    demo_payload = credit_api.fetch_credit_stub(user_id)
+    if demo_payload.get("score") is not None:
+        return JSONResponse({"enabled": True, **demo_payload})
     key = os.getenv("CREDIT_API_KEY", "").strip()
     if not key:
         return JSONResponse(
@@ -1126,17 +1163,11 @@ def api_credit_score(
                 "enabled": False,
                 "score": None,
                 "history": [],
-                "message": "Credit bureau integration not configured. Set CREDIT_API_KEY and wire your provider.",
+                "message": "Credit bureau integration not configured. Set CREDIT_API_KEY and wire your provider, "
+                "or set FINSAVVY_CREDIT_SCORE_NORMALIZED for a demo 0–100 signal.",
             }
         )
-    return JSONResponse(
-        {
-            "enabled": True,
-            "score": None,
-            "history": [],
-            "message": "API key present; implement provider calls in fin_savvy_app/credit_api.py when ready.",
-        }
-    )
+    return JSONResponse({"enabled": True, **credit_api.fetch_credit_stub(user_id)})
 
 
 @app.get("/tax/report")
@@ -1428,7 +1459,21 @@ async def tax_payslip_upload(
     content = await file.read()
     with open(full_path, "wb") as f:
         f.write(content)
-    crud.create_payslip(db, user_id=user_id, file_path=file_path, period_label=period_label)
+    gross_pay = net_pay = paye_estimate = None
+    if safe_ext.lower() == ".pdf":
+        extracted = payslip_extract.extract_payslip_fields_from_pdf(full_path)
+        gross_pay = extracted.get("gross_pay")
+        net_pay = extracted.get("net_pay")
+        paye_estimate = extracted.get("paye_estimate")
+    crud.create_payslip(
+        db,
+        user_id=user_id,
+        file_path=file_path,
+        period_label=period_label,
+        gross_pay=gross_pay,
+        net_pay=net_pay,
+        paye_estimate=paye_estimate,
+    )
     return RedirectResponse(url="/tax", status_code=303)
 
 

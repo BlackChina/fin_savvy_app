@@ -149,7 +149,17 @@
         <ul class="payslip-list" style="margin-top: 1rem;">
           {% for p in payslips %}
           <li>
-            <span>{{ p.period_label or p.uploaded_at.strftime('%Y-%m-%d') }}</span>
+            <span>
+              {{ p.period_label or p.uploaded_at.strftime('%Y-%m-%d') }}
+              {% if p.gross_pay is not none or p.net_pay is not none or p.paye_estimate is not none %}
+              <span style="display:block;font-size:0.78rem;color:#94a3b8;margin-top:0.2rem;">
+                {% if p.gross_pay is not none %}Gross R {{ "{:,.2f}".format(p.gross_pay) }}{% endif %}
+                {% if p.net_pay is not none %} · Net R {{ "{:,.2f}".format(p.net_pay) }}{% endif %}
+                {% if p.paye_estimate is not none %} · PAYE est. R {{ "{:,.2f}".format(p.paye_estimate) }}{% endif %}
+                <span style="display:block;font-style:italic;">From PDF text heuristics — verify on the slip.</span>
+              </span>
+              {% endif %}
+            </span>
             <a href="/tax/payslips/{{ p.id }}/file" target="_blank" rel="noopener">View</a>
           </li>
           {% endfor %}
@@ -157,6 +167,9 @@
         {% else %}
         <p style="color: #9ca3af; margin-top: 1rem;">No payslips uploaded yet.</p>
         {% endif %}
+        <p class="hint" style="margin-top:1.25rem;margin-bottom:0">SARS (external): use the official calculators and eFiling for submissions —
+          <a href="https://www.sars.gov.za" target="_blank" rel="noopener noreferrer" style="color:#38bdf8">sars.gov.za</a>
+          · <a href="https://www.sarsefiling.co.za" target="_blank" rel="noopener noreferrer" style="color:#38bdf8">SARS eFiling</a>.</p>
       </div>
     </main>
   </body>

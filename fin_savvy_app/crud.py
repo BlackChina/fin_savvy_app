@@ -313,11 +313,18 @@ def create_payslip(
     user_id: int,
     file_path: str,
     period_label: str | None = None,
+    *,
+    gross_pay: float | None = None,
+    net_pay: float | None = None,
+    paye_estimate: float | None = None,
 ) -> models.Payslip:
     p = models.Payslip(
         user_id=user_id,
         file_path=file_path,
         period_label=period_label,
+        gross_pay=gross_pay,
+        net_pay=net_pay,
+        paye_estimate=paye_estimate,
     )
     db.add(p)
     db.commit()

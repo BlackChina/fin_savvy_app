@@ -135,6 +135,17 @@ def _ensure_schema_patches() -> None:
                             "ALTER TABLE budget_month_commitment ADD COLUMN carryover_shortfall_streak INTEGER NOT NULL DEFAULT 0"
                         )
                     )
+        if "payslips" in tables:
+            ps_cols = {c["name"] for c in insp.get_columns("payslips")}
+            if "gross_pay" not in ps_cols:
+                with engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE payslips ADD COLUMN gross_pay DOUBLE PRECISION"))
+            if "net_pay" not in ps_cols:
+                with engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE payslips ADD COLUMN net_pay DOUBLE PRECISION"))
+            if "paye_estimate" not in ps_cols:
+                with engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE payslips ADD COLUMN paye_estimate DOUBLE PRECISION"))
     except Exception:
         pass
 
