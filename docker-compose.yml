@@ -37,6 +37,17 @@ services:
       - ./fin_savvy_app:/app/fin_savvy_app
     command: uvicorn fin_savvy_app.main:app --host 0.0.0.0 --port 8000
 
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+      - "9443:9443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+
   ejournal:
     build: .
     restart: unless-stopped
@@ -48,3 +59,4 @@ services:
 
 volumes:
   db_data:
+  portainer_data:
