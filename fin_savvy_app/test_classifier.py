@@ -21,15 +21,15 @@ SAMPLES = [
 
 
 def main() -> None:
-    mode = "local" if ml_classifier.is_ml_enabled() else "keyword"
-    print(f"Classifier mode: {mode}\n")
+    mode = ml_classifier.spending_breakdown_caption()
+    print(f"Spending breakdown / ML: {mode}\n")
     print(f"{'Description':<30} {'Category':<20} {'Party':<25}")
     print("-" * 75)
     for desc in SAMPLES:
         cat = classifier.get_category_label(desc, None) or "Other"
         party = classifier.get_party_name(desc, None)
         print(f"{desc:<30} {cat:<20} {party:<25}")
-    print("\nIf mode is 'local', the above used your trained ML models.")
+    print("\nWith on-disk joblib models, keyword mode still runs ML after rules (FINSAVVY_ML_AFTER_KEYWORD=1).")
 
 
 if __name__ == "__main__":

@@ -629,7 +629,7 @@
               <span class="tx-lists-disclosure__chevron" aria-hidden="true">▼</span>
               <span class="tx-lists-disclosure__title">Spending by category</span>
               <span class="tx-lists-disclosure__meta">
-                {% if has_cat_bars %}Keyword breakdown{% else %}Receipts{% endif %}
+                {% if has_cat_bars %}{{ spending_category_caption | default('Keyword rules') }}{% else %}Receipts{% endif %}
                 {% if cash_receipts_flag %}<span style="color: #475569;"> · </span><span class="meta-exp">Cash alert</span>{% endif %}
               </span>
             </span>
@@ -640,7 +640,7 @@
             <div class="card" style="margin-bottom: {% if cash_receipts_flag %}1rem{% else %}0{% endif %};">
               <div class="section-title">
                 <h2>Category totals</h2>
-                <span>This period (keyword-based)</span>
+                <span>This period ({{ spending_category_caption | default('Keyword rules') | lower }})</span>
               </div>
               <div class="category-bars">
                 {% for cat_name, cat_total in expense_by_category.items() %}

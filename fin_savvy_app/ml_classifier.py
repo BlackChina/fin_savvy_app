@@ -9,6 +9,9 @@ Modes (env FINSAVVY_CLASSIFIER):
 Optional (local ML): FINSAVVY_ML_MIN_PROBABILITY — if set (e.g. 0.35), drop predictions whose
 top-class probability is below that threshold (otherwise we always use argmax to reduce “Other”).
 
+When FINSAVVY_CLASSIFIER=keyword (default), local joblib models are still used after keywords fail
+if both model files exist — set FINSAVVY_ML_AFTER_KEYWORD=0 to disable (keywords only).
+
 Provisions for API: when FINSAVVY_CLASSIFIER=openai and OPENAI_API_KEY is set,
 the OpenAI path is used. Local mode requires no API key.
 """
@@ -53,6 +56,24 @@ _BANK_NOISE_PREFIX = re.compile(
 )
 _MASKED_PAN = re.compile(r"\*+\d{2,4}\*+|\b\d{4}\s+\d{4}\s+\d{4}\s+\d{4}\b", re.IGNORECASE)
 _LEADING_IDS = re.compile(r"^(?:\d+\s+)+")
+# Scheme / channel noise before merchant name (SA statements)
+_CARD_SCHEME_PREFIX = re.compile(
+    r"^(?:"
+    r"MASTERCARD|VISA|DEBIT\s+CARD|CREDIT\s+CARD|CHEQUE\s+CARD|"
+    r"TRACK\s*2|CHIP|SWIPE|"
+    r"SECURE\s+3D|3D\s+SECURE|"
+    r"APPLE\s+PAY|GOOGLE\s+PAY|SAMSUNG\s+PAY"
+    r")\s+",
+    re.IGNORECASE,
+)
+# Trailing bank reference tokens (keep merchant to the left)
+_TRAILING_REF = re.compile(
+    r"\s+(?:REF\.?\s*[:#]?\s*[A-Z0-9\-]{4,}|"
+    r"AUTH\.?\s*[:#]?\s*\d+|"
+    r"RRN\s*[:#]?\s*\d+|"
+    r"TERMINAL\s*[:#]?\s*\w+)$",
+    re.IGNORECASE,
+)
 
 
 def normalize_bank_description(description: str) -> str:
@@ -62,7 +83,10 @@ def normalize_bank_description(description: str) -> str:
         return ""
     s = _MASKED_PAN.sub(" ", s)
     s = _BANK_NOISE_PREFIX.sub("", s, count=1)
+    s = _CARD_SCHEME_PREFIX.sub("", s, count=1)
     s = _LEADING_IDS.sub("", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    s = _TRAILING_REF.sub("", s)
     s = re.sub(r"\s+", " ", s).strip().upper()
     return s
 
@@ -74,6 +98,32 @@ def canonical_category_label(raw: str | None, category_choices: list[str]) -> st
     s = str(raw).strip()
     if not s:
         return None
+    alias = {
+        "food & dining": "Dining",
+        "food and dining": "Dining",
+        "restaurants": "Dining",
+        "eating out": "Dining",
+        "groceries / food": "Groceries",
+        "grocery": "Groceries",
+        "supermarket": "Groceries",
+        "petrol": "Fuel",
+        "gas": "Fuel",
+        "cell phone": "Telecommunications",
+        "mobile phone": "Telecommunications",
+        "internet & tv": "Utilities",
+        "subscriptions": "Entertainment",
+        "streaming": "Entertainment",
+        "healthcare": "Health",
+        "pharmacy": "Health",
+        "atm fees": "Bank Fees",
+        "banking fees": "Bank Fees",
+        "transfer": "Bank Fees",
+        "misc": "Other",
+        "miscellaneous": "Other",
+    }
+    s_lo = s.lower()
+    if s_lo in alias:
+        s = alias[s_lo]
     if s in category_choices:
         return s
     lowered = {c.lower(): c for c in category_choices}
@@ -94,15 +144,35 @@ _local_category_pipe = None
 _local_party_pipe = None
 
 
+def _local_model_paths() -> tuple[Path, Path]:
+    return _DATA_DIR / "local_category_model.joblib", _DATA_DIR / "local_party_model.joblib"
+
+
+def local_model_files_exist() -> bool:
+    cat_path, party_path = _local_model_paths()
+    return cat_path.is_file() and party_path.is_file()
+
+
+def _allow_keyword_local_fallback() -> bool:
+    """Use trained local models after keyword rules when mode is keyword (default on)."""
+    if _CLASSIFIER_MODE != "keyword":
+        return False
+    v = os.environ.get("FINSAVVY_ML_AFTER_KEYWORD", "1").strip().lower()
+    return v not in ("0", "false", "no", "off")
+
+
+def _should_load_local_sklearn() -> bool:
+    return _CLASSIFIER_MODE == "local" or (_allow_keyword_local_fallback() and local_model_files_exist())
+
+
 def _get_local_models() -> tuple[object | None, object | None]:
     """Load and cache local joblib models."""
     global _local_category_pipe, _local_party_pipe
     if _local_category_pipe is not None and _local_party_pipe is not None:
         return _local_category_pipe, _local_party_pipe
-    if _CLASSIFIER_MODE != "local":
+    if not _should_load_local_sklearn():
         return (None, None)
-    cat_path = _DATA_DIR / "local_category_model.joblib"
-    party_path = _DATA_DIR / "local_party_model.joblib"
+    cat_path, party_path = _local_model_paths()
     if not cat_path.exists() or not party_path.exists():
         return (None, None)
     try:
@@ -115,15 +185,26 @@ def _get_local_models() -> tuple[object | None, object | None]:
 
 
 def is_ml_enabled() -> bool:
-    """True if ML classification is active (local or openai mode)."""
-    if _CLASSIFIER_MODE == "keyword":
-        return False
+    """True if ML can assist category/party (local, openai, or keyword+on-disk models)."""
+    if _CLASSIFIER_MODE == "openai":
+        return bool(_API_KEY)
     if _CLASSIFIER_MODE == "local":
         cat_pipe, party_pipe = _get_local_models()
         return cat_pipe is not None and party_pipe is not None
-    if _CLASSIFIER_MODE == "openai":
-        return bool(_API_KEY)
+    if _allow_keyword_local_fallback() and local_model_files_exist():
+        return True
     return False
+
+
+def spending_breakdown_caption() -> str:
+    """Short label for dashboard “Spending by category” (keyword vs ML-assisted)."""
+    if _CLASSIFIER_MODE == "openai" and _API_KEY:
+        return "OpenAI-assisted"
+    if _CLASSIFIER_MODE == "local" and local_model_files_exist():
+        return "Local ML"
+    if _allow_keyword_local_fallback() and local_model_files_exist():
+        return "Keywords + local ML"
+    return "Keyword rules"
 
 
 def classify_with_ml(
@@ -142,17 +223,21 @@ def classify_with_ml(
     if cache_key in _ML_CACHE:
         return _ML_CACHE[cache_key]
 
-    if _CLASSIFIER_MODE == "local":
+    if _CLASSIFIER_MODE == "openai":
+        if not _API_KEY:
+            return (None, None)
+        result = _classify_openai(description, amount, category_choices)
+    elif _CLASSIFIER_MODE == "local" or _allow_keyword_local_fallback():
+        cat_pipe, party_pipe = _get_local_models()
+        if cat_pipe is None or party_pipe is None:
+            return (None, None)
         result = _classify_local(description, category_choices)
         norm = normalize_bank_description(description)
-        if norm and norm != (description or "").strip().upper() and (
-            result[0] is None or result[0] == "Other"
-        ):
+        raw_upper = (description or "").strip().upper()
+        if norm and norm != raw_upper and (result[0] is None or result[0] == "Other"):
             alt = _classify_local(norm, category_choices)
             if alt[0] and alt[0] != "Other":
                 result = alt
-    elif _CLASSIFIER_MODE == "openai" and _API_KEY:
-        result = _classify_openai(description, amount, category_choices)
     else:
         return (None, None)
 

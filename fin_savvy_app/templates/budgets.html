@@ -32,9 +32,9 @@ th,td{padding:.5rem;text-align:left;border-bottom:1px solid #1f2937}
 .banner-nudge__title{margin:0 0 .4rem;font-size:.68rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#a5b4fc}
 .banner-nudge__text{margin:0;font-size:.93rem;line-height:1.6;color:#e2e8f0;font-weight:450}
 .banner-nudge__text strong{color:#fde68a;font-weight:600}
-.ok-banner{border:1px solid #166534;border-radius:.5rem;margin-bottom:1rem;font-size:.88rem;line-height:1.45;padding:.85rem 1rem}
-body.finsavvy-app-fill .ok-banner{background:#dcfce7;color:#14532d;font-weight:500;box-shadow:inset 0 1px 0 rgba(255,255,255,.6)}
-body.finsavvy-app-fill .ok-banner strong{color:#052e16;font-weight:700}
+.ok-banner{border:1px solid #047857;border-radius:.5rem;margin-bottom:1rem;font-size:.88rem;line-height:1.45;padding:.85rem 1rem}
+body.finsavvy-app-fill .ok-banner{background:#bbf7d0;color:#064e3b;font-weight:550;border-color:#059669;box-shadow:inset 0 1px 0 rgba(255,255,255,.75)}
+body.finsavvy-app-fill .ok-banner strong{color:#022c22;font-weight:750}
 .card--readonly-banner{border-color:#475569;background:linear-gradient(180deg,#1e293b,#0f172a);color:#e2e8f0}
 .card--readonly-banner p{margin:0;font-size:.92rem;line-height:1.55;color:#e2e8f0}
 .card--readonly-banner strong{color:#f8fafc}
@@ -189,7 +189,7 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
 </div>
 </form>
 {% if period_choices|length > 0 %}<datalist id="period-choices">{% for p in period_choices %}<option value="{{ p }}"/>{% endfor %}</datalist>{% endif %}
-<p class="hint" style="margin-top:.85rem;margin-bottom:0">Past calendar months open <strong>read-only</strong>. The 50/30/20 suggestion uses your patterns; <strong>Scope</strong> on each line is still <em>This account</em> vs <em>All accounts</em> when you add limits.</p>
+<p class="hint" style="margin-top:.85rem;margin-bottom:0">Past months stay <strong>read-only</strong> for quick line edits, but you can still <strong>replan the whole month</strong> (customize or scratch) from the finalized banner or the links under it. The 50/30/20 suggestion uses your patterns; <strong>Scope</strong> on each line is <em>This account</em> vs <em>All accounts</em>.</p>
 </div>
 
 {% if scratch_editing %}
@@ -212,7 +212,7 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
 </div>
 </form>
 </div>
-{% elif not view_only_month and default_503020 and (not budget_finalized or customize_editing) %}
+{% elif default_503020 and ((not view_only_month and (not budget_finalized or customize_editing)) or (view_only_month and customize_editing)) %}
 <div class="card" id="unified-budget">
 {% if budget_replanning %}
 <p class="hint" style="margin:0 0 .85rem;padding:.75rem 1rem;border-radius:.5rem;border:1px solid rgba(245,158,11,.45);background:rgba(120,53,15,.2);color:#fde68a;font-size:.88rem;line-height:1.5">You already have a <strong>saved budget</strong> for <strong>{{ period }}</strong>. Submitting this screen will <strong>replace</strong> those limits for this account. <a class="btn-ghost" style="display:inline-block;margin-top:.35rem" href="/budgets?account_id={{ account_id }}&amp;period={{ period }}&amp;budget_view={{ budget_view }}">Cancel — keep current budget</a></p>
@@ -304,6 +304,18 @@ details.fs-how p{margin:.5rem 0 0;font-size:.82rem;color:#9ca3af;line-height:1.4
 {% if view_only_month %}
 <div class="card card--readonly-banner">
 <p><strong>Read-only month.</strong> You are viewing <strong>{{ period }}</strong>. Below is the budget on record for that month and how your spending compared; the FinSavvy score summarises the same period.</p>
+<p style="margin:.85rem 0 0;font-size:.88rem;line-height:1.55">To <strong>replan</strong> this month, open customize (rules) or scratch — that replaces saved limits for this account.</p>
+<div class="budget-actions" style="margin:.75rem 0 0">
+<a class="btn-secondary" href="/budgets?account_id={{ account_id }}&amp;period={{ period }}&amp;budget_mode=customize&amp;budget_view={{ budget_view }}">Replan — custom edit (rules)</a>
+<a class="btn-secondary" href="/budgets?account_id={{ account_id }}&amp;period={{ period }}&amp;budget_mode=scratch&amp;budget_view={{ budget_view }}">Replan — from scratch</a>
+{% if default_503020 %}
+<form method="post" action="/budgets/commit-system" style="margin:0;display:inline" onsubmit="return confirm('Replace all saved limits for {{ period }} with the current system suggestion for this account?');">
+<input type="hidden" name="account_id" value="{{ account_id }}"/>
+<input type="hidden" name="year_month" value="{{ period }}"/>
+<button type="submit" class="btn-secondary">Use system suggestion again</button>
+</form>
+{% endif %}
+</div>
 </div>
 {% else %}
 <div class="ok-banner">Budget finalized for <strong>{{ period }}</strong>. You can add or remove lines below, or <strong>change your whole plan</strong> using the options under this message.</div>

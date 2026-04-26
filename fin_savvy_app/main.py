@@ -166,6 +166,45 @@ def _prior_month_income_for_budget(db: Session, account_id: int, year_month: str
     return float(crud.sum_income_for_account_calendar_month(db, account_id, int(py), int(pm_s)))
 
 
+def _envelope_stub_from_committed(
+    db: Session, account_id: int, year_month: str, rows: list[models.MonthlyBudget]
+) -> dict[str, object]:
+    """Minimal 50/30/20-shaped dict so customize UI can render when no system suggestion exists."""
+    ym = year_month.strip()
+    ref = sum(float(b.amount_limit) for b in rows)
+    prev_inc = _prior_month_income_for_budget(db, account_id, ym)
+    inc_est = max(ref, prev_inc) if prev_inc >= 100.0 else ref
+    min_c = budget_503020.min_monthly_carryover_default()
+    prev_ym = budget_validate.previous_year_month(ym) or ""
+    lines_out: list[dict[str, object]] = []
+    for b in rows:
+        bb = crud.normalize_budget_bucket(b.budget_bucket) or budget_503020.budget_bucket_for_category(
+            b.category_name
+        )
+        od_row = b.other_detail if (b.category_name or "").strip().lower() == "other" else None
+        lines_out.append(
+            {
+                "category": b.category_name,
+                "limit": float(b.amount_limit),
+                "bucket": bb,
+                "other_detail": od_row,
+            }
+        )
+    return {
+        "income_estimate": round(float(inc_est), 2),
+        "needs_pool": 0.0,
+        "wants_pool": 0.0,
+        "savings_pool": 0.0,
+        "lines": lines_out,
+        "reference_total": round(ref, 2),
+        "prior_month_for_income": prev_ym,
+        "prior_month_income": round(prev_inc, 2) if prev_inc >= 100.0 else None,
+        "min_monthly_carryover": round(float(min_c), 2),
+        "allocatable_for_502020": round(max(0.0, float(inc_est) - float(min_c)), 2),
+        "rule_note": "Using your saved limits as the baseline while you replan this month.",
+    }
+
+
 def _carryover_streak_gate_and_value(
     db: Session,
     *,
@@ -219,26 +258,11 @@ def _year_month_tuple(ym: str) -> tuple[int, int] | None:
         return None
 
 
-def _is_budget_period_closed(ym: str) -> bool:
-    """True when the budget month is strictly before the current calendar month (read-only)."""
-    t = _year_month_tuple(ym)
-    if not t:
-        return False
-    cy, cm = date.today().year, date.today().month
-    return t < (cy, cm)
-
-
 def _reject_closed_budget_month(
     request: Request, *, account_id: int, year_month: str
 ) -> RedirectResponse | None:
-    ym = year_month.strip()
-    if not _is_budget_period_closed(ym):
-        return None
-    request.session["budget_error"] = (
-        "That calendar month has ended. This screen is read-only for past months — "
-        "use “Jump to current month” at the top of Budgets or pick an open month."
-    )
-    return RedirectResponse(url=f"/budgets?account_id={account_id}&period={ym}{_budgets_bv_query(request)}", status_code=303)
+    """Past calendar months are no longer blocked: users can replan finalized budgets for history."""
+    return None
 
 
 UPLOAD_RECEIPTS_DIR = os.path.join(BASE_DIR, "uploads", "receipts")
@@ -700,6 +724,7 @@ def _render_dashboard(
                 "summary_scope": summary_scope,
                 "totals_range_label": "",
                 "dashboard_dedupe_active": False,
+                "spending_category_caption": classifier.spending_category_breakdown_caption(),
             },
         )
     if not crud.get_bank_account_for_user(db, account_id, user_id):
@@ -770,6 +795,7 @@ def _render_dashboard(
                 "summary_scope": summary_scope,
                 "totals_range_label": "",
                 "dashboard_dedupe_active": False,
+                "spending_category_caption": classifier.spending_category_breakdown_caption(),
             },
         )
 
@@ -875,9 +901,6 @@ def _render_dashboard(
     budget_by_category: dict[str, float] = {}
     for b in budget_rows:
         if b.bank_account_id == account_id:
-            budget_by_category[b.category_name] = b.amount_limit
-    for b in budget_rows:
-        if b.bank_account_id is None and b.category_name not in budget_by_category:
             budget_by_category[b.category_name] = b.amount_limit
 
     # Daily charts: bucket by each line's transaction date (current dashboard range)
@@ -1011,9 +1034,12 @@ def _render_dashboard(
             "summary_scope": summary_scope,
             "totals_range_label": totals_range_label,
             "dashboard_dedupe_active": dashboard_dedupe_active,
+            "spending_category_caption": classifier.spending_category_breakdown_caption(),
         },
     )
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
     return response
 
 
@@ -1600,27 +1626,49 @@ def budgets_page(
     cy, cm = date.today().year, date.today().month
     view_only_month = bool(ymt and ymt < (cy, cm))
     budget_mode = (request.query_params.get("budget_mode") or "").strip().lower()
-    if view_only_month:
-        budget_mode = ""
     open_month = not view_only_month
-    customize_editing = bool(budget_mode == "customize" and default_503020 and open_month)
+    acct_budget_lines = [b for b in budgets if b.bank_account_id == account_id]
+    customize_editing = bool(
+        budget_mode == "customize"
+        and (
+            (open_month and bool(default_503020))
+            or (view_only_month and finalized and (bool(default_503020) or bool(acct_budget_lines)))
+        )
+    )
+    if customize_editing and not default_503020 and finalized and acct_budget_lines:
+        default_503020 = _envelope_stub_from_committed(db, account_id, period, acct_budget_lines)
     draft_key = _budget_customize_draft_session_key(user_id, period, account_id)
     if customize_editing and not request.session.get(draft_key):
-        request.session[_budget_baseline_session_key(user_id, period, account_id)] = json.dumps(
-            {
-                "lines": [
+        base_key = _budget_baseline_session_key(user_id, period, account_id)
+        if finalized and acct_budget_lines:
+            baseline_lines = []
+            for r in acct_budget_lines:
+                od = r.other_detail if (r.category_name or "").strip().lower() == "other" else None
+                baseline_lines.append(
                     {
-                        "category": r["category"],
-                        "limit": float(r["limit"]),
-                        "bucket": r.get("bucket"),
-                        "other_detail": r.get("other_detail"),
+                        "category": r.category_name,
+                        "limit": float(r.amount_limit),
+                        "bucket": r.budget_bucket,
+                        "other_detail": od,
                     }
-                    for r in default_503020["lines"]
-                ]
-            }
-        )
-    scratch_editing = bool(budget_mode == "scratch" and open_month)
-    budget_replanning = bool(finalized and open_month and (customize_editing or scratch_editing))
+                )
+            request.session[base_key] = json.dumps({"lines": baseline_lines})
+        elif default_503020 and default_503020.get("lines"):
+            request.session[base_key] = json.dumps(
+                {
+                    "lines": [
+                        {
+                            "category": r["category"],
+                            "limit": float(r["limit"]),
+                            "bucket": r.get("bucket"),
+                            "other_detail": r.get("other_detail"),
+                        }
+                        for r in default_503020["lines"]
+                    ]
+                }
+            )
+    scratch_editing = bool(budget_mode == "scratch" and (open_month or view_only_month))
+    budget_replanning = bool(finalized and (customize_editing or scratch_editing))
     today_ym = f"{date.today().year}-{date.today().month:02d}"
     needs_budget_attention = (period == today_ym) and (not finalized) and (not view_only_month)
     budget_nag = request.query_params.get("budget_nag") == "1"
@@ -1659,7 +1707,21 @@ def budgets_page(
                         )
             except (json.JSONDecodeError, TypeError):
                 customize_seed_rows = []
-    if not customize_seed_rows and default_503020 and default_503020.get("lines"):
+    if not customize_seed_rows and finalized and acct_budget_lines:
+        for b in acct_budget_lines:
+            bb = crud.normalize_budget_bucket(b.budget_bucket) or budget_503020.budget_bucket_for_category(
+                b.category_name
+            )
+            od_seed = b.other_detail if (b.category_name or "").strip().lower() == "other" else None
+            customize_seed_rows.append(
+                {
+                    "category": b.category_name,
+                    "limit": b.amount_limit,
+                    "bucket": bb or "",
+                    "other_detail": od_seed,
+                }
+            )
+    elif not customize_seed_rows and default_503020 and default_503020.get("lines"):
         for r in default_503020["lines"]:
             customize_seed_rows.append(
                 {

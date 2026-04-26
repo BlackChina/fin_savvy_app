@@ -15,17 +15,19 @@ CATEGORY_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
     ("Telecommunications", ("VODACOM", "VOD PREPAID", "VODCOM", "TELKOM", "MTN", "CELL C", "AIRTIME", "DATA", "MOBILE")),
     ("Groceries", (
         "SHOPRITE", "CHECKERS", "PICK N PAY", "PNP", "WOOLWORTHS", "SPAR", "OK FOODS",
-        "FOOD LOVER", "MAKRO", "GROCER", "HYPER", "SIXTY60", "CHECKERS 60", "BOXER", "USAVE",
+        "FOOD LOVER", "FOOD LOVERS", "MAKRO", "GROCER", "HYPER", "SIXTY60", "CHECKERS 60", "BOXER", "USAVE",
+        "ULTRA", "METRO ", "SUPERSPAR", "SUPER SPAR", "MEAT WORLD", "FRESHMARK", "WELLNESS WAREHOUSE",
     )),
     ("Fuel", ("ENGEN", "SHELL", "FUEL", "GARAGE", "BP ", "CALTEX", "SASOL")),
     ("Transport", (
         "UBER", "BOLT", "GAUTRAIN", "REA VAYA", "METROBUS", "TAXI", "PUBLIC TRANSPORT",
-        "CAR PAYMENT", "CAR MAINTENANCE",
+        "CAR PAYMENT", "CAR MAINTENANCE", "MY CITI", "PUTCO", "GOTRANSIT", "E-TOLL", "ETOLL",
     )),
     ("Rent", ("RENT", "LANDLORD", "MORTGAGE", "RATES", "TAXES")),
     ("Utilities", (
-        "ESKOM", "ELECTRICITY", "CITY OF JHB", "WATER", "TELKOM", "INTERNET",
-        "RATES", "TAXES",
+        "ESKOM", "ELECTRICITY", "CITY OF JHB", "CITY OF CT", "CITY OF CPT", "CITY OF TSHWANE",
+        "CITY OF EKU", "MUNICIPAL", "PREPAID ELEC", "WATER", "TELKOM", "INTERNET",
+        "RATES", "TAXES", "AFRIHOST", "AXXESS", "COOL IDEAS", "WEBAFRICA", "HEROTEL", "VUMATEL",
     )),
     ("Dining", (
         "UBER EATS", "MR D FOOD", "DEBONAIRS", "STEERS", "KFC", "MCDONALD", "BURGER KING",
@@ -41,7 +43,9 @@ CATEGORY_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
         "MAKRO", "GAME", "BUILDERS", "CASHBUILD", "LEROY", "OUTDOOR WAREHOUSE", "CAPE UNION",
         "TRAPPERS", "CLICKS", "DIS-CHEM", "DISCHEM", "CLOTHING", "SHOES", "ELECTRONICS", "FURNITURE",
         "HOME DECOR", "GARDEN", "PET STORE", "LIQUOR", "TOBACCO", "MR PRICE", "PEPKOR",
-        "SNAPSCAN", "ZAPPER", "PAYFAST", "NETCASH",
+        "SNAPSCAN", "ZAPPER", "PAYFAST", "NETCASH", "PEACH", "OZOW", "STITCH", "YOCO",
+        "PEP ", "PEPSTORE", "ACKERMANS", "RAGE ", "JET ", "VERIMARK", "HI-FI CORP", "INCredible",
+        "CNA ", "EXCLUSIVE", "MUSICA", "WESTPACK",
     )),
     ("Entertainment", (
         "NETFLIX", "SPOTIFY", "SHOWMAX", "DSTV", "MULTICHOICE", "CINEMA", "MOVIE",
@@ -55,6 +59,7 @@ CATEGORY_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
     ("Health", (
         "CLINIC", "HOSPITAL", "PHARMACY", "DIS-CHEM", "CLICKS", "DOCTOR", "DENTIST",
         "OPTOMETRIST", "DISCOVERY", "HEALTH", "MEDICAL", "PRESCRIPTION",
+        "NETCARE", "LIFE HEALTH", "MEDI CLINIC", "PATHCARE", "LANCET", "MEDICAL AID",
     )),
     ("Education", (
         "SCHOOL", "UNIVERSITY", "TUITION", "TEXTBOOK", "STATIONERY", "STATIONARY",
@@ -220,9 +225,20 @@ def get_category_label(description: str, amount: float | None = None) -> str | N
     if ml_classifier.is_ml_enabled():
         cat_choices = get_all_category_names() + ["Other"]
         category, _party = ml_classifier.classify_with_ml(description, amount, cat_choices)
+        if category and category != "Other":
+            return category
+        if category == "Other" and d_norm:
+            category2, _ = ml_classifier.classify_with_ml(d_norm, amount, cat_choices)
+            if category2 and category2 != "Other":
+                return category2
         if category:
             return category
     return None
+
+
+def spending_category_breakdown_caption() -> str:
+    """UI label for how spending-by-category was derived (dashboard)."""
+    return ml_classifier.spending_breakdown_caption()
 
 
 def get_all_category_names() -> list[str]:
