@@ -15,7 +15,7 @@ CATEGORY_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
     ("Telecommunications", ("VODACOM", "VOD PREPAID", "VODCOM", "TELKOM", "MTN", "CELL C", "AIRTIME", "DATA", "MOBILE")),
     ("Groceries", (
         "SHOPRITE", "CHECKERS", "PICK N PAY", "PNP", "WOOLWORTHS", "SPAR", "OK FOODS",
-        "FOOD LOVER", "MAKRO", "GROCER", "HYPER",
+        "FOOD LOVER", "MAKRO", "GROCER", "HYPER", "SIXTY60", "CHECKERS 60", "BOXER", "USAVE",
     )),
     ("Fuel", ("ENGEN", "SHELL", "FUEL", "GARAGE", "BP ", "CALTEX", "SASOL")),
     ("Transport", (
@@ -33,13 +33,15 @@ CATEGORY_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
         "TIGER'S MILK", "HUSSAR", "MONTANA", "RESTAURANT", "TAKEAWAY", "DINING", "PIZZA",
         "FINE DINING", "STEAKHOUSE", "BISTRO", "EATERY",
         "STARBUCKS", "COFFEE ", "VIDA E CAFFE", "SEATTLE COFFEE", "BOOTLEGGER COFFEE",
+        "BOSSA", "BOSSASOMERSET", "BOSSASOMERS",
     )),
     ("Shopping", (
         "TAKEALOT", "EDGARS", "TRUWORTHS", "SPORTSCENE", "TOTALSPORTS", "STREET FEVER",
         "ZARA", "H&M", "COTTON ON", "SUPERBALIST", "ZANDO", "SHEIN", "TEMU", "AMAZON",
         "MAKRO", "GAME", "BUILDERS", "CASHBUILD", "LEROY", "OUTDOOR WAREHOUSE", "CAPE UNION",
-        "TRAPPERS", "CLICKS", "DIS-CHEM", "CLOTHING", "SHOES", "ELECTRONICS", "FURNITURE",
-        "HOME DECOR", "GARDEN", "PET STORE", "LIQUOR", "TOBACCO",
+        "TRAPPERS", "CLICKS", "DIS-CHEM", "DISCHEM", "CLOTHING", "SHOES", "ELECTRONICS", "FURNITURE",
+        "HOME DECOR", "GARDEN", "PET STORE", "LIQUOR", "TOBACCO", "MR PRICE", "PEPKOR",
+        "SNAPSCAN", "ZAPPER", "PAYFAST", "NETCASH",
     )),
     ("Entertainment", (
         "NETFLIX", "SPOTIFY", "SHOWMAX", "DSTV", "MULTICHOICE", "CINEMA", "MOVIE",
@@ -210,6 +212,11 @@ def get_category_label(description: str, amount: float | None = None) -> str | N
     for name, keywords in CATEGORY_KEYWORDS:
         if any(kw.upper() in d for kw in keywords):
             return name
+    d_norm = ml_classifier.normalize_bank_description(description or "")
+    if d_norm and d_norm != d:
+        for name, keywords in CATEGORY_KEYWORDS:
+            if any(kw.upper() in d_norm for kw in keywords):
+                return name
     if ml_classifier.is_ml_enabled():
         cat_choices = get_all_category_names() + ["Other"]
         category, _party = ml_classifier.classify_with_ml(description, amount, cat_choices)

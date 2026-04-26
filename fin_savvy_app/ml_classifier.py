@@ -6,6 +6,9 @@ Modes (env FINSAVVY_CLASSIFIER):
   local    - use models trained from your CSV (train_classifier.py); no API
   openai   - use OpenAI API (requires OPENAI_API_KEY); for later use
 
+Optional (local ML): FINSAVVY_ML_MIN_PROBABILITY — if set (e.g. 0.35), drop predictions whose
+top-class probability is below that threshold (otherwise we always use argmax to reduce “Other”).
+
 Provisions for API: when FINSAVVY_CLASSIFIER=openai and OPENAI_API_KEY is set,
 the OpenAI path is used. Local mode requires no API key.
 """
@@ -14,6 +17,7 @@ from __future__ import annotations
 
 import os
 import re
+from difflib import get_close_matches
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -32,6 +36,58 @@ _API_KEY: str | None = os.environ.get("OPENAI_API_KEY", "").strip() or None
 # In-memory cache (for both local and openai)
 _ML_CACHE: dict[str, tuple[str | None, str | None]] = {}
 _ML_CACHE_MAX = 2000
+
+# Strip common SA / card-scheme noise so keyword rules and TF–IDF see merchant text.
+_BANK_NOISE_PREFIX = re.compile(
+    r"^(?:"
+    r"POS\s+PURCHASE\s*|POS\s*|PURCHASE\s*|"
+    r"CONTACTLESS\s*|TAP\s+TO\s+PAY\s*|"
+    r"ONLINE\s+PURCHASE\s*|ONLINE\s+PAYMENT\s*|"
+    r"DEBIT\s+ORDER\s*|D/O\s+TO\s*|D/O\s*|"
+    r"DEBIT\s+|CREDIT\s+|"
+    r"EFT\s+|EFT\s+PAYMENT\s+|"
+    r"INSTANT\s+PAY\s+|IMMEDIATE\s+PAY\s+|"
+    r"REQUEST\s+TO\s+PAY\s+|RTP\s+"
+    r")+",
+    re.IGNORECASE,
+)
+_MASKED_PAN = re.compile(r"\*+\d{2,4}\*+|\b\d{4}\s+\d{4}\s+\d{4}\s+\d{4}\b", re.IGNORECASE)
+_LEADING_IDS = re.compile(r"^(?:\d+\s+)+")
+
+
+def normalize_bank_description(description: str) -> str:
+    """Uppercase description with POS/EFT prefixes and masked card numbers removed."""
+    s = (description or "").strip()
+    if not s:
+        return ""
+    s = _MASKED_PAN.sub(" ", s)
+    s = _BANK_NOISE_PREFIX.sub("", s, count=1)
+    s = _LEADING_IDS.sub("", s)
+    s = re.sub(r"\s+", " ", s).strip().upper()
+    return s
+
+
+def canonical_category_label(raw: str | None, category_choices: list[str]) -> str | None:
+    """Map model output (spacing/casing) onto the app's category list."""
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    if not s:
+        return None
+    if s in category_choices:
+        return s
+    lowered = {c.lower(): c for c in category_choices}
+    if s.lower() in lowered:
+        return lowered[s.lower()]
+    close = get_close_matches(s, category_choices, n=1, cutoff=0.82)
+    if close:
+        return close[0]
+    close_lo = get_close_matches(s.lower(), [c.lower() for c in category_choices], n=1, cutoff=0.88)
+    if close_lo:
+        for c in category_choices:
+            if c.lower() == close_lo[0]:
+                return c
+    return None
 
 # Lazy-loaded local models
 _local_category_pipe = None
@@ -88,6 +144,13 @@ def classify_with_ml(
 
     if _CLASSIFIER_MODE == "local":
         result = _classify_local(description, category_choices)
+        norm = normalize_bank_description(description)
+        if norm and norm != (description or "").strip().upper() and (
+            result[0] is None or result[0] == "Other"
+        ):
+            alt = _classify_local(norm, category_choices)
+            if alt[0] and alt[0] != "Other":
+                result = alt
     elif _CLASSIFIER_MODE == "openai" and _API_KEY:
         result = _classify_openai(description, amount, category_choices)
     else:
@@ -115,28 +178,29 @@ def _classify_local(description: str, category_choices: list[str]) -> tuple[str 
     if cat_pipe is None or party_pipe is None:
         return (None, None)
     try:
-        min_p_raw = os.environ.get("FINSAVVY_ML_MIN_PROBABILITY", "0.35").strip()
-        min_p = float(min_p_raw) if min_p_raw else 0.35
+        # If unset, always use argmax (avoids flooding “Other” when max prob is modest).
+        min_p_raw = os.environ.get("FINSAVVY_ML_MIN_PROBABILITY", "").strip()
+        min_p: float | None = float(min_p_raw) if min_p_raw else None
 
         cat: str | None
-        if min_p <= 0:
-            cat = str(cat_pipe.predict([description])[0])
-        elif hasattr(cat_pipe, "predict_proba"):
+        if hasattr(cat_pipe, "predict_proba"):
             classes = _pipeline_category_classes(cat_pipe)
             probs = cat_pipe.predict_proba([description])[0]
             if classes is not None and len(probs) == len(classes):
                 best_i = int(probs.argmax())
                 best_prob = float(probs[best_i])
-                cat = str(classes[best_i]) if best_prob >= min_p else None
+                cat = str(classes[best_i])
+                if min_p is not None and best_prob < min_p:
+                    cat = None
             else:
                 cat = str(cat_pipe.predict([description])[0])
         else:
             cat = str(cat_pipe.predict([description])[0])
 
+        cat = canonical_category_label(cat, category_choices)
         if cat is not None and cat not in category_choices and "Other" in category_choices:
             cat = "Other"
 
-        # If category is uncertain, do not trust the party head either (same collapse issue).
         party: str | None = None
         if cat is not None:
             party = str(party_pipe.predict([description])[0])
@@ -186,6 +250,7 @@ Use the exact category from the list. For PARTY use a concise name (2-4 words ma
             line = line.strip()
             if line.upper().startswith("CATEGORY:"):
                 category = line.split(":", 1)[1].strip()
+                category = canonical_category_label(category, category_choices) or category
                 if category not in category_choices:
                     category = "Other" if "Other" in category_choices else (category_choices[0] if category_choices else "Other")
             elif line.upper().startswith("PARTY:"):

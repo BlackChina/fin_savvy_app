@@ -1554,6 +1554,8 @@ def budgets_page(
                 "budget_commitment_info": None,
                 "budget_view": "per_account",
                 "budget_mode_query": "",
+                "budget_replanning": False,
+                "budgets_global_scope": [],
             },
         )
     if account_id is None:
@@ -1585,11 +1587,13 @@ def budgets_page(
         period = f"{latest.year}-{latest.month:02d}"
     if not period:
         period = f"{date.today().year}-{date.today().month:02d}"
-    budgets = (
-        crud.list_budgets_for_user(db, user_id, period, bank_account_id=None)
-        if budget_view == "combined"
-        else crud.list_budgets_for_user(db, user_id, period, bank_account_id=account_id)
-    )
+    if budget_view == "combined":
+        budgets = crud.list_budgets_for_user(db, user_id, period, bank_account_id=None)
+        budgets_global_scope: list = []
+    else:
+        _budget_rows = crud.list_budgets_for_user(db, user_id, period, bank_account_id=account_id)
+        budgets = [b for b in _budget_rows if b.bank_account_id == account_id]
+        budgets_global_scope = [b for b in _budget_rows if b.bank_account_id is None]
     finalized = crud.is_month_budget_finalized(db, user_id=user_id, year_month=period, bank_account_id=account_id)
     default_503020 = budget_503020.build_default_month_budget(db, account_id, period)
     ymt = _year_month_tuple(period)
@@ -1598,9 +1602,8 @@ def budgets_page(
     budget_mode = (request.query_params.get("budget_mode") or "").strip().lower()
     if view_only_month:
         budget_mode = ""
-    customize_editing = bool(
-        budget_mode == "customize" and default_503020 and not finalized and not view_only_month
-    )
+    open_month = not view_only_month
+    customize_editing = bool(budget_mode == "customize" and default_503020 and open_month)
     draft_key = _budget_customize_draft_session_key(user_id, period, account_id)
     if customize_editing and not request.session.get(draft_key):
         request.session[_budget_baseline_session_key(user_id, period, account_id)] = json.dumps(
@@ -1616,7 +1619,8 @@ def budgets_page(
                 ]
             }
         )
-    scratch_editing = bool(budget_mode == "scratch" and not finalized and not view_only_month)
+    scratch_editing = bool(budget_mode == "scratch" and open_month)
+    budget_replanning = bool(finalized and open_month and (customize_editing or scratch_editing))
     today_ym = f"{date.today().year}-{date.today().month:02d}"
     needs_budget_attention = (period == today_ym) and (not finalized) and (not view_only_month)
     budget_nag = request.query_params.get("budget_nag") == "1"
@@ -1725,7 +1729,7 @@ def budgets_page(
 
     budget_mode_query = (request.query_params.get("budget_mode") or "").strip().lower()[:24]
 
-    return templates.TemplateResponse(
+    response = templates.TemplateResponse(
         "budgets.html",
         {
             "request": request,
@@ -1734,6 +1738,7 @@ def budgets_page(
             "account_id": account_id,
             "period": period,
             "budgets": budgets,
+            "budgets_global_scope": budgets_global_scope,
             "categories": categories_union,
             "learned_categories": learned,
             "error": budget_error,
@@ -1759,8 +1764,12 @@ def budgets_page(
             "budget_commitment_info": budget_commitment_info,
             "budget_view": budget_view,
             "budget_mode_query": budget_mode_query,
+            "budget_replanning": budget_replanning,
         },
     )
+    response.headers["Cache-Control"] = "no-store, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    return response
 
 
 @app.post("/budgets/recommendations/accept", response_model=None, response_class=HTMLResponse)
