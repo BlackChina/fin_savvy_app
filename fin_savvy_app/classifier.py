@@ -8,6 +8,7 @@ First match wins; order matters (more specific keywords first).
 from __future__ import annotations
 
 from . import ml_classifier
+from .transaction_mappings import MANUAL_CATEGORY_KEYWORDS, MANUAL_PARTY_KEYWORDS
 
 # December 2025: Transaction Category (from your spreadsheet column).
 # Keywords match bank Description so we assign the right category for Spending by category.
@@ -187,12 +188,30 @@ _GENEROSITY_KEYWORDS: set[str] = set()
 _DISCRETIONARY_KEYWORDS: set[str] = set()
 
 
+def _match_keyword_rules(description_upper: str, rules: list[tuple[str, tuple[str, ...]]]) -> str | None:
+    for label, keywords in rules:
+        if any(kw.upper() in description_upper for kw in keywords):
+            return label
+    return None
+
+
 def get_party_name(description: str, amount: float | None = None) -> str:
     """Returns the party name: keyword match first, then ML if enabled and no match, else description."""
     d = (description or "").upper()
+    mapped_party = _match_keyword_rules(d, MANUAL_PARTY_KEYWORDS)
+    if mapped_party:
+        return mapped_party
     for party_name, keywords in PARTY_KEYWORDS:
         if any(kw.upper() in d for kw in keywords):
             return party_name
+    d_norm = ml_classifier.normalize_bank_description(description or "")
+    if d_norm and d_norm != d:
+        mapped_party = _match_keyword_rules(d_norm, MANUAL_PARTY_KEYWORDS)
+        if mapped_party:
+            return mapped_party
+        for party_name, keywords in PARTY_KEYWORDS:
+            if any(kw.upper() in d_norm for kw in keywords):
+                return party_name
     if ml_classifier.is_ml_enabled():
         cat_choices = get_all_category_names() + ["Other"]
         _cat, party = ml_classifier.classify_with_ml(description, amount, cat_choices)
@@ -214,11 +233,17 @@ def is_discretionary(description: str) -> bool:
 def get_category_label(description: str, amount: float | None = None) -> str | None:
     """Returns the category: keyword match first, then ML if enabled and no match, else None (Other)."""
     d = (description or "").upper()
+    mapped_category = _match_keyword_rules(d, MANUAL_CATEGORY_KEYWORDS)
+    if mapped_category:
+        return mapped_category
     for name, keywords in CATEGORY_KEYWORDS:
         if any(kw.upper() in d for kw in keywords):
             return name
     d_norm = ml_classifier.normalize_bank_description(description or "")
     if d_norm and d_norm != d:
+        mapped_category = _match_keyword_rules(d_norm, MANUAL_CATEGORY_KEYWORDS)
+        if mapped_category:
+            return mapped_category
         for name, keywords in CATEGORY_KEYWORDS:
             if any(kw.upper() in d_norm for kw in keywords):
                 return name
@@ -243,9 +268,21 @@ def spending_category_breakdown_caption() -> str:
 
 def get_all_category_names() -> list[str]:
     """Returns all category names in order (for Spending by category and defaults)."""
-    return [name for name, _ in CATEGORY_KEYWORDS]
+    seen: set[str] = set()
+    out: list[str] = []
+    for name, _ in MANUAL_CATEGORY_KEYWORDS + CATEGORY_KEYWORDS:
+        if name not in seen:
+            seen.add(name)
+            out.append(name)
+    return out
 
 
 def get_all_party_names() -> list[str]:
     """Party labels from keyword rules (for settings / budgets UI)."""
-    return [name for name, _ in PARTY_KEYWORDS]
+    seen: set[str] = set()
+    out: list[str] = []
+    for name, _ in MANUAL_PARTY_KEYWORDS + PARTY_KEYWORDS:
+        if name not in seen:
+            seen.add(name)
+            out.append(name)
+    return out

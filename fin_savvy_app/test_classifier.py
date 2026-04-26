@@ -23,6 +23,7 @@ SAMPLES = [
 def main() -> None:
     mode = ml_classifier.spending_breakdown_caption()
     print(f"Spending breakdown / ML: {mode}\n")
+    print("Manual mappings file: fin_savvy_app/transaction_mappings.py\n")
     print(f"{'Description':<30} {'Category':<20} {'Party':<25}")
     print("-" * 75)
     for desc in SAMPLES:
